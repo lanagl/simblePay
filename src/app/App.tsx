@@ -1,942 +1,1722 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import React, {useCallback, useEffect, useRef, useState} from "react";
+import {observer} from "mobx-react-lite";
 import {
-  ShoppingCart, X, Plus, Minus, CreditCard, Banknote, Trash2, Search,
-  ChevronRight, CheckCircle2, Receipt, Tag, PackagePlus, ChevronDown,
-  LayoutGrid, ListOrdered, ScanLine, ShieldCheck, AlertTriangle, Info,
-  CheckCheck,
+    AlertTriangle,
+    Banknote,
+    BarChart3,
+    Building2,
+    CheckCheck,
+    CheckCircle2,
+    CheckSquare,
+    ChevronDown,
+    ChevronRight,
+    Clock,
+    CreditCard,
+    Database,
+    Eye,
+    EyeOff,
+    Info,
+    KeyRound,
+    LayoutGrid,
+    ListOrdered,
+    Loader2,
+    Lock,
+    LogIn,
+    LogOut,
+    Minus,
+    PackagePlus,
+    Pencil,
+    Plus,
+    Receipt,
+    RefreshCw,
+    ScanLine,
+    Search,
+    Server,
+    Settings,
+    ShieldCheck,
+    ShoppingCart,
+    Tag,
+    Trash,
+    Trash2,
+    TrendingUp,
+    User,
+    UserCircle,
+    Wallet,
+    Wifi,
+    WifiOff,
+    X,
 } from "lucide-react";
+import {useStore} from "../stores/rootStore";
+import type {CartItem, PaymentMethod, Product} from "../stores/posStore";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  category: string;
-  emoji: string;
-  barcode: string;
-  isMarked: boolean;
-}
-
-interface CartItem extends Product {
-  qty: number;
-  markCodes: string[]; // one code per unit
-}
-
-type PaymentMethod = "cash" | "card";
-type AppView = "pos" | "payment" | "receipt";
-type MobileTab = "catalog" | "cart";
-
-// ─── Data ────────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRESET_CATEGORIES = ["Напитки", "Выпечка", "Молочные", "Снеки", "Табак"];
-const PRESET_EMOJIS = ["🥤","💧","🍊","⚡","☕","🥐","🥖","🫓","🥛","🍶","🧀","🫙","🥔","🍫","🥜","🚬","🔥","🍕","🍔","🌮","🍱","🥗","🍰","🍩","🍬","🧃","🍺","🫖","🧴","🪥","📦","🛒"];
-
-const INITIAL_PRODUCTS: Product[] = [
-  { id: 1,  name: "Кока-Кола 0.5л",       price: 89,  category: "Напитки",  emoji: "🥤", barcode: "4607134302541", isMarked: false },
-  { id: 2,  name: "Вода Bon Aqua",         price: 55,  category: "Напитки",  emoji: "💧", barcode: "4670005030012", isMarked: false },
-  { id: 3,  name: "Сок Добрый апельсин",   price: 72,  category: "Напитки",  emoji: "🍊", barcode: "4660046312408", isMarked: false },
-  { id: 4,  name: "Энергетик Red Bull",    price: 175, category: "Напитки",  emoji: "⚡", barcode: "9002490100070", isMarked: false },
-  { id: 5,  name: "Кофе Nescafé 3в1",     price: 42,  category: "Напитки",  emoji: "☕", barcode: "7613036960748", isMarked: false },
-  { id: 6,  name: "Булочка с маком",       price: 38,  category: "Выпечка",  emoji: "🥐", barcode: "4601767122349", isMarked: false },
-  { id: 7,  name: "Круассан масляный",     price: 65,  category: "Выпечка",  emoji: "🥖", barcode: "4607134302558", isMarked: false },
-  { id: 8,  name: "Пирожок с капустой",    price: 45,  category: "Выпечка",  emoji: "🫓", barcode: "4670001210236", isMarked: false },
-  { id: 9,  name: "Молоко Простоквашино",  price: 89,  category: "Молочные", emoji: "🥛", barcode: "4607014220152", isMarked: true  },
-  { id: 10, name: "Кефир 1%",             price: 65,  category: "Молочные", emoji: "🍶", barcode: "4670003251023", isMarked: true  },
-  { id: 11, name: "Сыр Российский 200г",  price: 185, category: "Молочные", emoji: "🧀", barcode: "4607014220169", isMarked: true  },
-  { id: 12, name: "Йогурт Активиа",       price: 79,  category: "Молочные", emoji: "🫙", barcode: "7622210721044", isMarked: true  },
-  { id: 13, name: "Чипсы Lay's 150г",     price: 115, category: "Снеки",    emoji: "🥔", barcode: "5900259064416", isMarked: false },
-  { id: 14, name: "Шоколад Milka 90г",    price: 142, category: "Снеки",    emoji: "🍫", barcode: "7622210721051", isMarked: false },
-  { id: 15, name: "Орешки к пиву",        price: 58,  category: "Снеки",    emoji: "🥜", barcode: "4670005040110", isMarked: false },
-  { id: 16, name: "Сигареты Winston",     price: 245, category: "Табак",    emoji: "🚬", barcode: "5000169041613", isMarked: true  },
-  { id: 17, name: "Сигареты Marlboro",    price: 260, category: "Табак",    emoji: "🚬", barcode: "5000169041620", isMarked: true  },
-  { id: 18, name: "Зажигалка BIC",        price: 89,  category: "Снеки",    emoji: "🔥", barcode: "3501170512040", isMarked: false },
-];
-
+const PRESET_EMOJIS = ["🥤", "💧", "🍊", "⚡", "☕", "🥐", "🥖", "🫓", "🥛", "🍶", "🧀", "🫙", "🥔", "🍫", "🥜", "🚬", "🔥", "🍕", "🍔", "🌮", "🍱", "🥗", "🍰", "🍩", "🍬", "🧃", "🍺", "🫖", "🧴", "🪥", "📦", "🛒"];
+const CASHIERS = ["Иванова А.", "Петров И.", "Сидорова М.", "Козлов Д.", "Новикова Е."];
 const TAX_RATE = 0.20;
 
 const fmt = (n: number) =>
-  n.toLocaleString("ru-RU", { style: "currency", currency: "RUB", minimumFractionDigits: 2 });
+    n.toLocaleString("ru-RU", {style: "currency", currency: "RUB", minimumFractionDigits: 2});
 
 const nowStr = () =>
-  new Date().toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    new Date().toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
 
-// Generates a plausible-looking DataMatrix mark code
 const genDemoCode = (barcode: string) => {
-  const rnd = Math.random().toString(36).slice(2, 12).toUpperCase();
-  return `010${barcode}21${rnd}`;
+    const rnd = Math.random().toString(36).slice(2, 12).toUpperCase();
+    return `010${barcode}21${rnd}`;
 };
 
-let nextId = INITIAL_PRODUCTS.length + 1;
+type AppView = "pos" | "payment" | "receipt";
+type MobileTab = "catalog" | "cart";
 
 // ─── NumPad ───────────────────────────────────────────────────────────────────
 
-function NumPad({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const keys = ["7","8","9","4","5","6","1","2","3","00","0","⌫"];
-  const press = (k: string) => {
-    if (k === "⌫") onChange(value.length > 1 ? value.slice(0, -1) : "0");
-    else if (k === "00") onChange(value === "0" ? "0" : value + "00");
-    else onChange(value === "0" ? k : value.length < 9 ? value + k : value);
-  };
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {keys.map(k => (
-        <button key={k} onClick={() => press(k)}
-          className={`h-14 rounded-lg text-xl font-mono font-semibold transition-all active:scale-95
+function NumPad({value, onChange}: { value: string; onChange: (v: string) => void }) {
+    const keys = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "00", "0", "⌫"];
+    const press = (k: string) => {
+        if (k === "⌫") onChange(value.length > 1 ? value.slice(0, -1) : "0");
+        else if (k === "00") onChange(value === "0" ? "0" : value + "00");
+        else onChange(value === "0" ? k : value.length < 9 ? value + k : value);
+    };
+    return (
+        <div className="grid grid-cols-3 gap-2">
+            {keys.map(k => (
+                <button key={k} onClick={() => press(k)}
+                        className={`h-14 rounded-lg text-xl font-mono font-semibold transition-all active:scale-95
             ${k === "⌫" ? "bg-destructive/10 text-destructive hover:bg-destructive/20"
-              : "bg-secondary text-foreground hover:bg-muted border border-border"}`}>
-          {k}
-        </button>
-      ))}
-    </div>
-  );
+                            : "bg-secondary text-foreground hover:bg-muted border border-border"}`}>
+                    {k}
+                </button>
+            ))}
+        </div>
+    );
 }
 
-// ─── Mark Code Scanner Modal ──────────────────────────────────────────────────
+// ─── Login Screen ─────────────────────────────────────────────────────────────
+
+const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => void }) => {
+    const {posAuth, posStore} = useStore();
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [showPass, setShowPass] = useState(false);
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const ok = await posAuth.login(username, password);
+        if (ok) {
+            posStore.loadProducts(posAuth.token!);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+            <div className="w-full max-w-sm">
+                {/* Logo */}
+                <div className="text-center mb-8">
+                    <div
+                        className="w-20 h-20 bg-primary rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-primary/20">
+                        <Receipt className="w-10 h-10 text-primary-foreground"/>
+                    </div>
+                    <h1 className="text-3xl font-bold text-foreground tracking-tight">КассаPRO</h1>
+                    <p className="text-muted-foreground text-sm mt-2">Система кассового обслуживания</p>
+                </div>
+
+                {/* Card */}
+                <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-6 py-5 border-b border-border">
+                        <div className="flex items-center gap-2">
+                            <UserCircle className="w-5 h-5 text-primary"/>
+                            <h2 className="font-bold text-foreground">Вход в систему</h2>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleLogin} className="p-6 space-y-4">
+                        {/* Error */}
+                        {posAuth.error && (
+                            <div
+                                className="flex items-center gap-2 bg-destructive/8 border border-destructive/20 rounded-xl px-4 py-3 text-sm text-destructive">
+                                <AlertTriangle className="w-4 h-4 shrink-0"/>
+                                {posAuth.error}
+                            </div>
+                        )}
+
+                        {/* Username */}
+                        <div>
+                            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                                Логин
+                            </label>
+                            <div className="relative">
+                                <User
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/>
+                                <input
+                                    value={username}
+                                    onChange={e => setUsername(e.target.value)}
+                                    placeholder="Введите логин"
+                                    autoComplete="username"
+                                    required
+                                    className="w-full h-11 bg-secondary border border-border rounded-xl pl-10 pr-4 text-sm focus:outline-none focus:border-primary/60 transition-colors"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Password */}
+                        <div>
+                            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                                Пароль
+                            </label>
+                            <div className="relative">
+                                <Lock
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/>
+                                <input
+                                    type={showPass ? "text" : "password"}
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    placeholder="Введите пароль"
+                                    autoComplete="current-password"
+                                    required
+                                    className="w-full h-11 bg-secondary border border-border rounded-xl pl-10 pr-11 text-sm focus:outline-none focus:border-primary/60 transition-colors"
+                                />
+                                <button type="button" onClick={() => setShowPass(v => !v)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                                    {showPass ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Submit */}
+                        <button
+                            type="submit"
+                            disabled={posAuth.isLoading || !username || !password}
+                            className="w-full h-12 mt-2 bg-primary text-primary-foreground rounded-xl font-bold text-base hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                            {posAuth.isLoading
+                                ? <><Loader2 className="w-5 h-5 animate-spin"/>Вход...</>
+                                : <><LogIn className="w-5 h-5"/>Войти</>}
+                        </button>
+                    </form>
+                </div>
+
+                {/* API settings link */}
+                <button
+                    onClick={onShowApiSettings}
+                    className="w-full mt-4 flex items-center justify-center gap-2 text-muted-foreground text-sm hover:text-foreground transition-colors py-2">
+                    <Server className="w-4 h-4"/>
+                    Настройки подключения к серверу
+                </button>
+
+                <p className="text-center text-muted-foreground text-xs mt-6 font-mono">
+                    ООО «РОМАШКА» · ИНН 7701234567
+                </p>
+            </div>
+        </div>
+    );
+});
+
+// ─── API Settings Modal ───────────────────────────────────────────────────────
+
+const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
+    const {posAuth} = useStore();
+    const [url, setUrl] = useState(posAuth.apiBaseUrl);
+    const [testResult, setTestResult] = useState<"idle" | "testing" | "ok" | "error">("idle");
+    const [testMsg, setTestMsg] = useState("");
+
+    const handleTest = async () => {
+        setTestResult("testing");
+        posAuth.setApiBaseUrl(url);
+        try {
+            await fetch(`${url}/health`).then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            });
+            setTestResult("ok");
+            setTestMsg("Сервер доступен");
+        } catch (e) {
+            setTestResult("error");
+            setTestMsg("Сервер недоступен: " + (e instanceof Error ? e.message : "неизвестная ошибка"));
+        }
+    };
+
+    const handleSave = () => {
+        posAuth.setApiBaseUrl(url);
+        onClose();
+    };
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+            <div
+                className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                    <div className="flex items-center gap-2">
+                        <Server className="w-5 h-5 text-primary"/>
+                        <h2 className="font-bold text-foreground">Подключение к серверу</h2>
+                    </div>
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+
+                <div className="p-5 space-y-4">
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <Database className="w-3.5 h-3.5"/>Адрес API
+                        </label>
+                        <input
+                            value={url}
+                            onChange={e => {
+                                setUrl(e.target.value);
+                                setTestResult("idle");
+                            }}
+                            placeholder="http://localhost:3000/api"
+                            className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"
+                        />
+                    </div>
+
+                    {testResult !== "idle" && (
+                        <div className={`flex items-center gap-2 rounded-xl px-4 py-3 border text-sm ${
+                            testResult === "testing" ? "bg-muted border-border text-muted-foreground"
+                                : testResult === "ok" ? "bg-primary/5 border-primary/20 text-primary"
+                                    : "bg-destructive/5 border-destructive/20 text-destructive"
+                        }`}>
+                            {testResult === "testing"
+                                ? <Loader2 className="w-4 h-4 animate-spin shrink-0"/>
+                                : testResult === "ok"
+                                    ? <CheckCircle2 className="w-4 h-4 shrink-0"/>
+                                    : <AlertTriangle className="w-4 h-4 shrink-0"/>}
+                            {testMsg || "Проверка..."}
+                        </div>
+                    )}
+
+                    {/* MySQL schema hint */}
+                    <div className="bg-muted rounded-xl p-4 space-y-2">
+                        <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <Database className="w-3.5 h-3.5 text-muted-foreground"/>
+                            Ожидаемая схема MySQL
+                        </p>
+                        <pre
+                            className="text-[11px] text-muted-foreground leading-relaxed overflow-x-auto">{`CREATE TABLE products
+                                                                                                            (
+                                                                                                                id        INT AUTO_INCREMENT PRIMARY KEY,
+                                                                                                                name      VARCHAR(255)   NOT NULL,
+                                                                                                                price     DECIMAL(10, 2) NOT NULL,
+                                                                                                                emoji     VARCHAR(10) DEFAULT '📦',
+                                                                                                                category  VARCHAR(100)   NOT NULL,
+                                                                                                                barcode   VARCHAR(50),
+                                                                                                                is_marked TINYINT(1) DEFAULT 0
+                                                                                                            );
+
+                        CREATE TABLE users
+                        (
+                            id       INT AUTO_INCREMENT PRIMARY KEY,
+                            name     VARCHAR(255)        NOT NULL,
+                            username VARCHAR(100) UNIQUE NOT NULL,
+                            password VARCHAR(255)        NOT NULL, -- bcrypt
+                            role     ENUM('cashier','manager','admin')
+                        );`}</pre>
+                    </div>
+
+                    <div className="bg-muted rounded-xl p-3 flex gap-2">
+                        <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5"/>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                            Бэкенд должен принимать <span className="font-mono">Bearer</span> токен в заголовке <span
+                            className="font-mono">Authorization</span>.
+                            Эндпоинты: <span className="font-mono">POST /auth/login</span>, <span className="font-mono">GET /products</span>, <span
+                            className="font-mono">POST /products</span>, <span
+                            className="font-mono">PUT /products/:id</span>, <span className="font-mono">DELETE /products/:id</span>.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="px-5 pb-5 flex gap-3">
+                    <button onClick={handleTest} disabled={testResult === "testing"}
+                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                        {testResult === "testing" ? <Loader2 className="w-4 h-4 animate-spin"/> :
+                            <RefreshCw className="w-4 h-4"/>}
+                        Проверить
+                    </button>
+                    <button onClick={handleSave}
+                            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                        <CheckSquare className="w-4 h-4"/>Сохранить
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+// ─── OFD Settings Modal ───────────────────────────────────────────────────────
+
+const OfdSettingsModal = observer(({onClose}: { onClose: () => void }) => {
+    const {auth} = useStore();
+    const [login, setLogin] = useState(auth.login);
+    const [password, setPassword] = useState(auth.password);
+    const [inn, setInn] = useState(auth.inn);
+
+    const handleSave = async () => {
+        auth.setCredentials(login, password, inn);
+        await auth.authenticate();
+        onClose();
+    };
+
+    const statusColor = auth.isConnected ? "text-primary" : auth.isLoading ? "text-accent" : "text-destructive";
+    const statusText = auth.isConnected
+        ? `Подключено · до ${auth.tokenExpiresAt ? new Date(auth.tokenExpiresAt).toLocaleTimeString("ru-RU", {
+            hour: "2-digit",
+            minute: "2-digit"
+        }) : "—"}`
+        : auth.isLoading ? "Подключение..." : auth.error ?? "Не подключено";
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+            <div
+                className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[95vh] flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+                    <div className="flex items-center gap-2">
+                        <Settings className="w-5 h-5 text-primary"/>
+                        <h2 className="font-bold text-foreground">Настройки ОФД Ferma®</h2>
+                    </div>
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 border ${
+                        auth.isConnected ? "bg-primary/5 border-primary/20" : "bg-muted border-border"
+                    }`}>
+                        {auth.isLoading
+                            ? <Loader2 className="w-4 h-4 text-accent animate-spin shrink-0"/>
+                            : auth.isConnected
+                                ? <Wifi className="w-4 h-4 text-primary shrink-0"/>
+                                : <WifiOff className="w-4 h-4 text-destructive shrink-0"/>}
+                        <span className={`text-sm font-medium ${statusColor}`}>{statusText}</span>
+                    </div>
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <KeyRound className="w-3.5 h-3.5"/>Логин
+                        </label>
+                        <input value={login} onChange={e => setLogin(e.target.value)}
+                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                    </div>
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5"/>Пароль
+                        </label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                    </div>
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5"/>ИНН организации
+                        </label>
+                        <input value={inn} onChange={e => setInn(e.target.value)} inputMode="numeric" maxLength={12}
+                               placeholder="000000000000"
+                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                    </div>
+                </div>
+                <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
+                    <button onClick={() => {
+                        auth.setCredentials(login, password, inn);
+                        auth.authenticate();
+                    }} disabled={auth.isLoading}
+                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                        {auth.isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> :
+                            <RefreshCw className="w-4 h-4"/>}
+                        Проверить
+                    </button>
+                    <button onClick={handleSave} disabled={auth.isLoading}
+                            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50">
+                        <CheckSquare className="w-4 h-4"/>Сохранить
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+// ─── Mark Scan Modal ──────────────────────────────────────────────────────────
 
 interface MarkScanModalProps {
-  item: CartItem;
-  onSave: (codes: string[]) => void;
-  onClose: () => void;
+    item: CartItem;
+    onSave: (codes: string[]) => void;
+    onClose: () => void;
 }
 
-function MarkScanModal({ item, onSave, onClose }: MarkScanModalProps) {
-  const [codes, setCodes] = useState<string[]>([...item.markCodes]);
-  const [input, setInput] = useState("");
-  const [error, setError] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+function MarkScanModal({item, onSave, onClose}: MarkScanModalProps) {
+    const [codes, setCodes] = useState<string[]>([...item.markCodes]);
+    const [input, setInput] = useState("");
+    const [error, setError] = useState("");
+    const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+    useEffect(() => {
+        inputRef.current?.focus();
+    }, []);
 
-  // How many codes are still needed
-  const needed = item.qty - codes.length;
+    const needed = item.qty - codes.length;
+    const addCode = (raw: string) => {
+        const code = raw.trim();
+        if (!code) return;
+        if (code.length < 10) {
+            setError("Код слишком короткий");
+            return;
+        }
+        if (codes.includes(code)) {
+            setError("Этот код уже добавлен");
+            return;
+        }
+        if (codes.length >= item.qty) {
+            setError("Все коды уже отсканированы");
+            return;
+        }
+        setCodes(c => [...c, code]);
+        setInput("");
+        setError("");
+        inputRef.current?.focus();
+    };
+    const allDone = codes.length >= item.qty;
 
-  const addCode = (raw: string) => {
-    const code = raw.trim();
-    if (!code) return;
-    if (code.length < 10) { setError("Код слишком короткий"); return; }
-    if (codes.includes(code)) { setError("Этот код уже добавлен"); return; }
-    if (codes.length >= item.qty) { setError("Все коды уже отсканированы"); return; }
-    setCodes(c => [...c, code]);
-    setInput("");
-    setError("");
-    inputRef.current?.focus();
-  };
-
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") addCode(input);
-  };
-
-  const simulateScan = () => {
-    const code = genDemoCode(item.barcode);
-    addCode(code);
-  };
-
-  const removeCode = (i: number) => setCodes(c => c.filter((_, idx) => idx !== i));
-
-  const allDone = codes.length >= item.qty;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
-      <div className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <ScanLine className="w-5 h-5 text-primary" />
-            <div>
-              <h2 className="font-bold text-foreground text-sm leading-none">Коды маркировки</h2>
-              <p className="text-muted-foreground text-xs mt-0.5">{item.emoji} {item.name}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-5 space-y-4">
-          {/* Progress */}
-          <div className={`rounded-xl p-3 flex items-center gap-3 ${allDone ? "bg-primary/10 border border-primary/20" : "bg-accent/10 border border-accent/20"}`}>
-            {allDone
-              ? <CheckCheck className="w-5 h-5 text-primary shrink-0" />
-              : <AlertTriangle className="w-5 h-5 text-accent shrink-0" />}
-            <div className="flex-1">
-              <p className={`text-sm font-semibold ${allDone ? "text-primary" : "text-accent"}`}>
-                {allDone ? "Все коды отсканированы" : `Осталось отсканировать: ${needed} из ${item.qty}`}
-              </p>
-              <div className="flex gap-1 mt-1.5">
-                {Array.from({ length: item.qty }).map((_, i) => (
-                  <div key={i} className={`flex-1 h-1.5 rounded-full ${i < codes.length ? "bg-primary" : "bg-border"}`} />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Input */}
-          {!allDone && (
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground uppercase tracking-wide block">
-                Сканируйте или введите код DataMatrix
-              </label>
-              <div className="flex gap-2">
-                <input
-                  ref={inputRef}
-                  value={input}
-                  onChange={e => { setInput(e.target.value); setError(""); }}
-                  onKeyDown={handleKey}
-                  placeholder="010xxxxxxxxxxxxxxx21xxxxxxxxxx"
-                  className={`flex-1 h-11 bg-secondary border rounded-xl px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors
-                    ${error ? "border-destructive" : "border-border focus:border-primary/60"}`}
-                />
-                <button onClick={() => addCode(input)}
-                  disabled={!input.trim()}
-                  className="h-11 px-4 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-30">
-                  Добавить
-                </button>
-              </div>
-              {error && <p className="text-destructive text-xs">{error}</p>}
-              <button onClick={simulateScan}
-                className="w-full h-10 bg-secondary border border-dashed border-primary/40 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2">
-                <ScanLine className="w-4 h-4" />
-                Симулировать сканирование
-              </button>
-            </div>
-          )}
-
-          {/* Scanned codes list */}
-          {codes.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Отсканированные коды</p>
-              {codes.map((c, i) => (
-                <div key={i} className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2">
-                  <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                  <span className="flex-1 text-xs font-mono text-foreground truncate">{c}</span>
-                  <button onClick={() => removeCode(i)} className="text-muted-foreground hover:text-destructive transition-colors">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Info */}
-          <div className="flex gap-2 bg-muted rounded-xl p-3">
-            <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Код маркировки — уникальный DataMatrix на упаковке каждого товара. Требуется для передачи в систему «Честный знак».
-            </p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
-          <button onClick={onClose}
-            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors">
-            Отмена
-          </button>
-          <button
-            onClick={() => { onSave(codes); onClose(); }}
-            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
-            <CheckCheck className="w-4 h-4" />
-            Сохранить {codes.length > 0 && `(${codes.length})`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Add Product Modal ────────────────────────────────────────────────────────
-
-interface AddProductModalProps {
-  existingCategories: string[];
-  onAdd: (p: Omit<Product, "id">) => void;
-  onClose: () => void;
-}
-
-function AddProductModal({ existingCategories, onAdd, onClose }: AddProductModalProps) {
-  const allCats = Array.from(new Set([...PRESET_CATEGORIES, ...existingCategories]));
-  const [name, setName] = useState("");
-  const [priceStr, setPriceStr] = useState("");
-  const [category, setCategory] = useState(allCats[0]);
-  const [customCat, setCustomCat] = useState("");
-  const [useCustomCat, setUseCustomCat] = useState(false);
-  const [emoji, setEmoji] = useState("📦");
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [barcode, setBarcode] = useState("");
-  const [isMarked, setIsMarked] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!name.trim()) e.name = "Введите название";
-    const p = parseFloat(priceStr.replace(",", "."));
-    if (!priceStr || isNaN(p) || p <= 0) e.price = "Введите корректную цену";
-    if (useCustomCat && !customCat.trim()) e.category = "Введите категорию";
-    return e;
-  };
-
-  const handleSubmit = () => {
-    const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
-    onAdd({
-      name: name.trim(),
-      price: Math.round(parseFloat(priceStr.replace(",", ".")) * 100) / 100,
-      category: useCustomCat ? customCat.trim() : category,
-      emoji,
-      barcode: barcode.trim() || String(Date.now()),
-      isMarked,
-    });
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[95vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <PackagePlus className="w-5 h-5 text-primary" />
-            <h2 className="font-bold text-foreground">Добавить товар</h2>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-5 space-y-4">
-          {/* Emoji */}
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-2 block">Иконка</label>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setShowEmojiPicker(v => !v)}
-                className="w-14 h-14 bg-secondary border border-border rounded-xl text-3xl flex items-center justify-center hover:border-primary/50 transition-colors">
-                {emoji}
-              </button>
-              <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                <span>Нажмите для выбора</span>
-                <ChevronDown className="w-4 h-4" />
-              </div>
-            </div>
-            {showEmojiPicker && (
-              <div className="mt-2 bg-secondary border border-border rounded-xl p-3 grid grid-cols-8 gap-1">
-                {PRESET_EMOJIS.map(e => (
-                  <button key={e} onClick={() => { setEmoji(e); setShowEmojiPicker(false); }}
-                    className={`w-9 h-9 text-xl rounded-lg flex items-center justify-center transition-colors
-                      ${emoji === e ? "bg-primary/20 ring-1 ring-primary" : "hover:bg-muted"}`}>
-                    {e}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Name */}
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Название *</label>
-            <input value={name}
-              onChange={e => { setName(e.target.value); setErrors(v => ({ ...v, name: "" })); }}
-              placeholder="Например: Молоко Простоквашино 1л"
-              className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors
-                ${errors.name ? "border-destructive" : "border-border focus:border-primary/60"}`} />
-            {errors.name && <p className="text-destructive text-xs mt-1">{errors.name}</p>}
-          </div>
-
-          {/* Price */}
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Цена, ₽ *</label>
-            <input value={priceStr}
-              onChange={e => { setPriceStr(e.target.value); setErrors(v => ({ ...v, price: "" })); }}
-              inputMode="decimal" placeholder="0.00"
-              className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors
-                ${errors.price ? "border-destructive" : "border-border focus:border-primary/60"}`} />
-            {errors.price && <p className="text-destructive text-xs mt-1">{errors.price}</p>}
-          </div>
-
-          {/* Category */}
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Категория *</label>
-            <div className="flex gap-2 mb-2">
-              <button onClick={() => setUseCustomCat(false)}
-                className={`flex-1 h-9 rounded-lg text-sm font-medium transition-colors
-                  ${!useCustomCat ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
-                Выбрать
-              </button>
-              <button onClick={() => setUseCustomCat(true)}
-                className={`flex-1 h-9 rounded-lg text-sm font-medium transition-colors
-                  ${useCustomCat ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
-                Новая
-              </button>
-            </div>
-            {!useCustomCat ? (
-              <div className="grid grid-cols-3 gap-2">
-                {allCats.map(c => (
-                  <button key={c} onClick={() => setCategory(c)}
-                    className={`h-9 rounded-lg text-sm font-medium transition-colors truncate px-2
-                      ${category === c ? "bg-primary/15 text-primary border border-primary/30" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <>
-                <input value={customCat}
-                  onChange={e => { setCustomCat(e.target.value); setErrors(v => ({ ...v, category: "" })); }}
-                  placeholder="Название категории"
-                  className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors
-                    ${errors.category ? "border-destructive" : "border-border focus:border-primary/60"}`} />
-                {errors.category && <p className="text-destructive text-xs mt-1">{errors.category}</p>}
-              </>
-            )}
-          </div>
-
-          {/* Barcode */}
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Штрихкод <span className="normal-case">(необязательно)</span></label>
-            <input value={barcode} onChange={e => setBarcode(e.target.value)} inputMode="numeric"
-              placeholder="Введите или отсканируйте"
-              className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60 transition-colors" />
-          </div>
-
-          {/* Marking toggle */}
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Маркировка</label>
-            <button onClick={() => setIsMarked(v => !v)}
-              className={`w-full h-12 rounded-xl border font-semibold text-sm flex items-center gap-3 px-4 transition-all
-                ${isMarked ? "bg-primary/10 border-primary/30 text-primary" : "bg-secondary border-border text-muted-foreground hover:text-foreground"}`}>
-              <ShieldCheck className="w-5 h-5" />
-              <div className="flex-1 text-left">
-                <span>{isMarked ? "Товар подлежит маркировке" : "Маркировка не требуется"}</span>
-                {isMarked && <p className="text-xs font-normal text-primary/70">При продаже нужно сканировать DataMatrix</p>}
-              </div>
-              <div className={`w-10 h-6 rounded-full relative transition-colors ${isMarked ? "bg-primary" : "bg-border"}`}>
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isMarked ? "left-5" : "left-1"}`} />
-              </div>
-            </button>
-          </div>
-        </div>
-
-        <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
-          <button onClick={onClose}
-            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors">
-            Отмена
-          </button>
-          <button onClick={handleSubmit}
-            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
-            <Plus className="w-4 h-4" />Добавить
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-export default function App() {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [category, setCategory] = useState("Все");
-  const [search, setSearch] = useState("");
-  const [view, setView] = useState<AppView>("pos");
-  const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
-  const [cashInput, setCashInput] = useState("0");
-  const [receiptData, setReceiptData] = useState<{
-    items: CartItem[]; total: number; cash: number; change: number; method: PaymentMethod; time: string;
-  } | null>(null);
-  const [discount, setDiscount] = useState(0);
-  const [mobileTab, setMobileTab] = useState<MobileTab>("catalog");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [scanningItem, setScanningItem] = useState<CartItem | null>(null);
-
-  const allCategories = ["Все", ...Array.from(new Set(products.map(p => p.category)))];
-
-  // Cart logic
-  const addToCart = useCallback((p: Product) => {
-    setCart(c => {
-      const ex = c.find(i => i.id === p.id);
-      return ex
-        ? c.map(i => i.id === p.id ? { ...i, qty: i.qty + 1 } : i)
-        : [...c, { ...p, qty: 1, markCodes: [] }];
-    });
-  }, []);
-
-  const updateQty = useCallback((id: number, delta: number) => {
-    setCart(c => c.flatMap(i => {
-      if (i.id !== id) return [i];
-      const newQty = i.qty + delta;
-      if (newQty <= 0) return [];
-      // trim codes if reducing qty
-      return [{ ...i, qty: newQty, markCodes: i.markCodes.slice(0, newQty) }];
-    }));
-  }, []);
-
-  const removeItem = useCallback((id: number) => setCart(c => c.filter(i => i.id !== id)), []);
-  const clearCart = () => { setCart([]); setDiscount(0); };
-
-  const saveMarkCodes = (id: number, codes: string[]) => {
-    setCart(c => c.map(i => i.id === id ? { ...i, markCodes: codes } : i));
-  };
-
-  const handleAddProduct = (p: Omit<Product, "id">) => {
-    setProducts(prev => [...prev, { ...p, id: nextId++ }]);
-    if (category !== "Все" && category !== p.category) setCategory(p.category);
-  };
-
-  // Totals
-  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const discountAmt = Math.round(subtotal * discount / 100);
-  const taxable = subtotal - discountAmt;
-  const tax = Math.round(taxable * TAX_RATE);
-  const total = taxable;
-  const cashNum = parseInt(cashInput) || 0;
-  const change = cashNum - total;
-  const cartCount = cart.reduce((s, i) => s + i.qty, 0);
-
-  // Check if all marked items have codes
-  const missingCodes = cart.filter(i => i.isMarked && i.markCodes.length < i.qty);
-  const canPay = cart.length > 0 && missingCodes.length === 0;
-
-  const filtered = products.filter(p =>
-    (category === "Все" || p.category === category) &&
-    (search === "" || p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search))
-  );
-
-  const handlePay = () => {
-    if (!canPay) return;
-    if (payMethod === "cash" && cashNum < total) return;
-    setReceiptData({ items: [...cart], total, cash: cashNum, change: payMethod === "cash" ? change : 0, method: payMethod, time: nowStr() });
-    setView("receipt");
-    clearCart();
-    setCashInput("0");
-  };
-
-  // ── Receipt ───────────────────────────────────────────────────────────────
-  if (view === "receipt" && receiptData) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="bg-card border border-border rounded-2xl overflow-hidden">
-            <div className="bg-primary/10 border-b border-border p-6 text-center">
-              <CheckCircle2 className="w-12 h-12 text-primary mx-auto mb-3" />
-              <h2 className="text-xl font-bold text-foreground">Оплата прошла</h2>
-              <p className="text-muted-foreground text-sm mt-1">{receiptData.time}</p>
-            </div>
-            <div className="p-5 space-y-2">
-              {receiptData.items.map(i => (
-                <div key={i.id}>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-foreground flex items-center gap-1.5">
-                      {i.isMarked && <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />}
-                      {i.name} <span className="text-muted-foreground">×{i.qty}</span>
-                    </span>
-                    <span className="font-mono font-semibold text-foreground">{fmt(i.price * i.qty)}</span>
-                  </div>
-                  {i.isMarked && i.markCodes.map((c, idx) => (
-                    <p key={idx} className="text-xs font-mono text-muted-foreground pl-5 mt-0.5 truncate">↳ {c}</p>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div className="border-t border-border mx-5" />
-            <div className="p-5 space-y-2 text-sm">
-              <div className="flex justify-between text-muted-foreground">
-                <span>НДС 20%</span>
-                <span className="font-mono">{fmt(Math.round(receiptData.total * TAX_RATE / (1 + TAX_RATE)))}</span>
-              </div>
-              <div className="flex justify-between text-lg font-bold text-foreground">
-                <span>ИТОГО</span>
-                <span className="font-mono text-primary">{fmt(receiptData.total)}</span>
-              </div>
-              {receiptData.method === "cash" && (
-                <>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Наличные</span><span className="font-mono">{fmt(receiptData.cash)}</span>
-                  </div>
-                  <div className="flex justify-between text-accent font-semibold">
-                    <span>Сдача</span><span className="font-mono">{fmt(receiptData.change)}</span>
-                  </div>
-                </>
-              )}
-              <div className="flex justify-between text-muted-foreground text-xs pt-1">
-                <span>Способ оплаты</span>
-                <span>{receiptData.method === "cash" ? "Наличные" : "Карта"}</span>
-              </div>
-            </div>
-            <div className="p-5 pt-0">
-              <button onClick={() => { setView("pos"); setMobileTab("catalog"); }}
-                className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity">
-                Новый чек
-              </button>
-            </div>
-          </div>
-          <p className="text-center text-muted-foreground text-xs mt-4 font-mono">
-            ООО «РОМАШКА» • ИНН 7701234567 • ФН 9999078900012345
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Payment ───────────────────────────────────────────────────────────────
-  if (view === "payment") {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-lg bg-card border border-border rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-            <h2 className="text-lg font-bold text-foreground">Оплата заказа</h2>
-            <button onClick={() => setView("pos")} className="text-muted-foreground hover:text-foreground transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(100vh-80px)]">
-            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 text-center">
-              <p className="text-muted-foreground text-sm mb-1">К оплате</p>
-              <p className="text-4xl font-mono font-bold text-primary">{fmt(total)}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {(["cash", "card"] as PaymentMethod[]).map(m => (
-                <button key={m} onClick={() => setPayMethod(m)}
-                  className={`flex items-center justify-center gap-2 h-14 rounded-xl border font-semibold transition-all
-                    ${payMethod === m ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-secondary text-foreground border-border hover:border-primary/50"}`}>
-                  {m === "cash" ? <Banknote className="w-5 h-5" /> : <CreditCard className="w-5 h-5" />}
-                  {m === "cash" ? "Наличные" : "Карта"}
-                </button>
-              ))}
-            </div>
-            {payMethod === "cash" && (
-              <div className="space-y-3">
-                <div className="bg-secondary border border-border rounded-xl px-4 py-3 flex items-baseline justify-between">
-                  <span className="text-muted-foreground text-sm">Принято</span>
-                  <span className="font-mono text-2xl font-bold text-foreground">{fmt(parseInt(cashInput) || 0)}</span>
-                </div>
-                <NumPad value={cashInput} onChange={setCashInput} />
-                <div className="grid grid-cols-4 gap-2">
-                  {[500, 1000, 2000, 5000].map(a => (
-                    <button key={a} onClick={() => setCashInput(String(a))}
-                      className="h-9 bg-secondary hover:bg-muted border border-border rounded-lg text-sm font-mono font-semibold text-foreground transition-colors">
-                      {a}
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+            <div
+                className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[92vh] flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+                    <div className="flex items-center gap-2">
+                        <ScanLine className="w-5 h-5 text-primary"/>
+                        <div>
+                            <h2 className="font-bold text-foreground text-sm leading-none">Коды маркировки</h2>
+                            <p className="text-muted-foreground text-xs mt-0.5">{item.product.emoji} {item.product.name}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-5 h-5"/>
                     </button>
-                  ))}
                 </div>
-                {cashNum >= total && (
-                  <div className="bg-accent/10 border border-accent/30 rounded-xl px-4 py-3 flex justify-between">
-                    <span className="text-accent font-medium">Сдача</span>
-                    <span className="font-mono text-xl font-bold text-accent">{fmt(change)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-            {payMethod === "card" && (
-              <div className="bg-secondary/50 border border-border rounded-xl p-6 text-center">
-                <CreditCard className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-foreground font-medium">Приложите или вставьте карту</p>
-                <p className="text-muted-foreground text-sm mt-1">Ожидание терминала...</p>
-              </div>
-            )}
-            <button onClick={handlePay}
-              disabled={payMethod === "cash" && cashNum < total}
-              className="w-full h-14 bg-primary text-primary-foreground rounded-xl font-bold text-lg hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed">
-              {payMethod === "cash"
-                ? cashNum >= total ? `Принять — ${fmt(total)}` : `Не хватает ${fmt(total - cashNum)}`
-                : `Оплата картой — ${fmt(total)}`}
-            </button>
-          </div>
+                <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                    <div
+                        className={`rounded-xl p-3 flex items-center gap-3 ${allDone ? "bg-primary/10 border border-primary/20" : "bg-accent/10 border border-accent/20"}`}>
+                        {allDone ? <CheckCheck className="w-5 h-5 text-primary shrink-0"/> :
+                            <AlertTriangle className="w-5 h-5 text-accent shrink-0"/>}
+                        <div className="flex-1">
+                            <p className={`text-sm font-semibold ${allDone ? "text-primary" : "text-accent"}`}>
+                                {allDone ? "Все коды отсканированы" : `Осталось: ${needed} из ${item.qty}`}
+                            </p>
+                            <div className="flex gap-1 mt-1.5">
+                                {Array.from({length: item.qty}).map((_, i) => (
+                                    <div key={i}
+                                         className={`flex-1 h-1.5 rounded-full ${i < codes.length ? "bg-primary" : "bg-border"}`}/>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    {!allDone && (
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <input ref={inputRef} value={input}
+                                       onChange={e => {
+                                           setInput(e.target.value);
+                                           setError("");
+                                       }}
+                                       onKeyDown={e => e.key === "Enter" && addCode(input)}
+                                       placeholder="010xxxxxxxxxxxxxxx21xxxxxxxxxx"
+                                       className={`flex-1 h-11 bg-secondary border rounded-xl px-3 text-sm font-mono focus:outline-none transition-colors ${error ? "border-destructive" : "border-border focus:border-primary/60"}`}/>
+                                <button onClick={() => addCode(input)} disabled={!input.trim()}
+                                        className="h-11 px-4 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:opacity-90 disabled:opacity-30">+
+                                </button>
+                            </div>
+                            {error && <p className="text-destructive text-xs">{error}</p>}
+                            <button onClick={() => addCode(genDemoCode(item.product.barcode))}
+                                    className="w-full h-10 bg-secondary border border-dashed border-primary/40 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2">
+                                <ScanLine className="w-4 h-4"/>Симулировать сканирование
+                            </button>
+                        </div>
+                    )}
+                    {codes.length > 0 && (
+                        <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Отсканировано</p>
+                            {codes.map((c, i) => (
+                                <div key={i} className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2">
+                                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0"/>
+                                    <span className="flex-1 text-xs font-mono text-foreground truncate">{c}</span>
+                                    <button onClick={() => setCodes(c => c.filter((_, idx) => idx !== i))}
+                                            className="text-muted-foreground hover:text-destructive transition-colors">
+                                        <X className="w-3.5 h-3.5"/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
+                    <button onClick={onClose}
+                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors">
+                        Отмена
+                    </button>
+                    <button onClick={() => {
+                        onSave(codes);
+                        onClose();
+                    }}
+                            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                        <CheckCheck className="w-4 h-4"/>Сохранить{codes.length > 0 && ` (${codes.length})`}
+                    </button>
+                </div>
+            </div>
         </div>
-      </div>
     );
-  }
+}
 
-  // ── Catalog panel ─────────────────────────────────────────────────────────
-  const CatalogPanel = () => (
-    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-      <div className="px-4 pt-4 pb-3 space-y-3">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Поиск или штрихкод..."
-              className="w-full h-10 bg-secondary border border-border rounded-xl pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60 transition-colors" />
-          </div>
-          <button onClick={() => setShowAddModal(true)}
-            className="h-10 px-3 bg-primary text-primary-foreground rounded-xl font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity shrink-0">
-            <PackagePlus className="w-4 h-4" />
-            <span className="hidden sm:inline text-sm">Товар</span>
-          </button>
+// ─── Add / Edit Product Modal ─────────────────────────────────────────────────
+
+interface ProductModalProps {
+    existingCategories: string[];
+    initial?: Product;
+    onSave: (p: Omit<Product, "id">) => void;
+    onClose: () => void;
+}
+
+function ProductModal({existingCategories, initial, onSave, onClose}: ProductModalProps) {
+    const allCats = Array.from(new Set([...PRESET_CATEGORIES, ...existingCategories]));
+    const [name, setName] = useState(initial?.name ?? "");
+    const [priceStr, setPriceStr] = useState(initial ? String(initial.price) : "");
+    const [category, setCategory] = useState(initial?.category ?? allCats[0]);
+    const [customCat, setCustomCat] = useState("");
+    const [useCustomCat, setUseCustomCat] = useState(false);
+    const [emoji, setEmoji] = useState(initial?.emoji ?? "📦");
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [barcode, setBarcode] = useState(initial?.barcode ?? "");
+    const [isMarked, setIsMarked] = useState(initial?.isMarked ?? false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const isEdit = !!initial;
+
+    const validate = () => {
+        const e: Record<string, string> = {};
+        if (!name.trim()) e.name = "Введите название";
+        const p = parseFloat(priceStr.replace(",", "."));
+        if (!priceStr || isNaN(p) || p <= 0) e.price = "Введите корректную цену";
+        if (useCustomCat && !customCat.trim()) e.category = "Введите категорию";
+        return e;
+    };
+
+    const handleSubmit = () => {
+        const e = validate();
+        if (Object.keys(e).length) {
+            setErrors(e);
+            return;
+        }
+        onSave({
+            name: name.trim(),
+            price: Math.round(parseFloat(priceStr.replace(",", ".")) * 100) / 100,
+            category: useCustomCat ? customCat.trim() : category,
+            emoji,
+            barcode: barcode.trim() || String(Date.now()),
+            isMarked,
+        });
+        onClose();
+    };
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm">
+            <div
+                className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[95vh] flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+                    <div className="flex items-center gap-2">
+                        {isEdit ? <Pencil className="w-5 h-5 text-primary"/> :
+                            <PackagePlus className="w-5 h-5 text-primary"/>}
+                        <h2 className="font-bold text-foreground">{isEdit ? "Редактировать товар" : "Добавить товар"}</h2>
+                    </div>
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                    {/* Emoji */}
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-2 block">Иконка</label>
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => setShowEmojiPicker(v => !v)}
+                                    className="w-14 h-14 bg-secondary border border-border rounded-xl text-3xl flex items-center justify-center hover:border-primary/50 transition-colors">
+                                {emoji}
+                            </button>
+                            <div className="flex items-center gap-1 text-muted-foreground text-sm"><span>Нажмите для выбора</span><ChevronDown
+                                className="w-4 h-4"/></div>
+                        </div>
+                        {showEmojiPicker && (
+                            <div
+                                className="mt-2 bg-secondary border border-border rounded-xl p-3 grid grid-cols-8 gap-1">
+                                {PRESET_EMOJIS.map(e => (
+                                    <button key={e} onClick={() => {
+                                        setEmoji(e);
+                                        setShowEmojiPicker(false);
+                                    }}
+                                            className={`w-9 h-9 text-xl rounded-lg flex items-center justify-center transition-colors ${emoji === e ? "bg-primary/20 ring-1 ring-primary" : "hover:bg-muted"}`}>
+                                        {e}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    {/* Name */}
+                    <div>
+                        <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Название
+                            *</label>
+                        <input value={name} onChange={e => {
+                            setName(e.target.value);
+                            setErrors(v => ({...v, name: ""}));
+                        }}
+                               placeholder="Молоко Простоквашино 1л"
+                               className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm focus:outline-none transition-colors ${errors.name ? "border-destructive" : "border-border focus:border-primary/60"}`}/>
+                        {errors.name && <p className="text-destructive text-xs mt-1">{errors.name}</p>}
+                    </div>
+                    {/* Price */}
+                    <div>
+                        <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Цена, ₽
+                            *</label>
+                        <input value={priceStr} onChange={e => {
+                            setPriceStr(e.target.value);
+                            setErrors(v => ({...v, price: ""}));
+                        }}
+                               inputMode="decimal" placeholder="0.00"
+                               className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm font-mono focus:outline-none transition-colors ${errors.price ? "border-destructive" : "border-border focus:border-primary/60"}`}/>
+                        {errors.price && <p className="text-destructive text-xs mt-1">{errors.price}</p>}
+                    </div>
+                    {/* Category */}
+                    <div>
+                        <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Категория
+                            *</label>
+                        <div className="flex gap-2 mb-2">
+                            <button onClick={() => setUseCustomCat(false)}
+                                    className={`flex-1 h-9 rounded-lg text-sm font-medium transition-colors ${!useCustomCat ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
+                                Выбрать
+                            </button>
+                            <button onClick={() => setUseCustomCat(true)}
+                                    className={`flex-1 h-9 rounded-lg text-sm font-medium transition-colors ${useCustomCat ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
+                                Новая
+                            </button>
+                        </div>
+                        {!useCustomCat ? (
+                            <div className="grid grid-cols-3 gap-2">
+                                {allCats.map(c => (
+                                    <button key={c} onClick={() => setCategory(c)}
+                                            className={`h-9 rounded-lg text-sm font-medium transition-colors truncate px-2 ${category === c ? "bg-primary/15 text-primary border border-primary/30" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
+                                        {c}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <>
+                                <input value={customCat} onChange={e => {
+                                    setCustomCat(e.target.value);
+                                    setErrors(v => ({...v, category: ""}));
+                                }}
+                                       placeholder="Название категории"
+                                       className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm focus:outline-none transition-colors ${errors.category ? "border-destructive" : "border-border focus:border-primary/60"}`}/>
+                                {errors.category && <p className="text-destructive text-xs mt-1">{errors.category}</p>}
+                            </>
+                        )}
+                    </div>
+                    {/* Barcode */}
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Штрихкод</label>
+                        <input value={barcode} onChange={e => setBarcode(e.target.value)} inputMode="numeric"
+                               placeholder="Введите или отсканируйте"
+                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                    </div>
+                    {/* Marking */}
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Маркировка</label>
+                        <button onClick={() => setIsMarked(v => !v)}
+                                className={`w-full h-12 rounded-xl border font-semibold text-sm flex items-center gap-3 px-4 transition-all ${isMarked ? "bg-primary/10 border-primary/30 text-primary" : "bg-secondary border-border text-muted-foreground hover:text-foreground"}`}>
+                            <ShieldCheck className="w-5 h-5"/>
+                            <div className="flex-1 text-left">
+                                <span>{isMarked ? "Товар подлежит маркировке" : "Маркировка не требуется"}</span>
+                                {isMarked &&
+									<p className="text-xs font-normal text-primary/70">При продаже нужно сканировать
+										DataMatrix</p>}
+                            </div>
+                            <div
+                                className={`w-10 h-6 rounded-full relative transition-colors ${isMarked ? "bg-primary" : "bg-border"}`}>
+                                <div
+                                    className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isMarked ? "left-5" : "left-1"}`}/>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
+                    <button onClick={onClose}
+                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors">
+                        Отмена
+                    </button>
+                    <button onClick={handleSubmit}
+                            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                        {isEdit ? <><Pencil className="w-4 h-4"/>Сохранить</> : <><Plus
+                            className="w-4 h-4"/>Добавить</>}
+                    </button>
+                </div>
+            </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {allCategories.map(c => (
-            <button key={c} onClick={() => setCategory(c)}
-              className={`shrink-0 px-4 h-8 rounded-lg text-sm font-medium transition-all
-                ${category === c ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground border border-border"}`}>
-              {c}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-          {filtered.map(p => {
-            const inCart = cart.find(i => i.id === p.id);
-            return (
-              <button key={p.id} onClick={() => addToCart(p)}
-                className={`relative text-left bg-card border rounded-xl p-3 transition-all hover:scale-[1.02] active:scale-[0.98]
-                  ${inCart ? "border-primary/40 bg-primary/5" : "border-border hover:border-border/60"}`}>
-                {/* Marking badge */}
-                {p.isMarked && (
-                  <span className="absolute top-2 left-2 flex items-center gap-0.5 bg-primary/15 text-primary text-[10px] font-semibold px-1.5 py-0.5 rounded-md">
-                    <ShieldCheck className="w-2.5 h-2.5" />М
-                  </span>
+    );
+}
+
+// ─── Shift Open Screen ────────────────────────────────────────────────────────
+
+const ShiftOpenScreen = observer(({onOpen}: { onOpen: (cashier: string, cash: number) => void }) => {
+    const {posStore, posAuth} = useStore();
+    const [cashier, setCashier] = useState(posAuth.user?.name ?? CASHIERS[0]);
+    const [cashStr, setCashStr] = useState("0");
+    const [step, setStep] = useState<"form" | "confirm">("form");
+    const cashAmt = parseInt(cashStr) || 0;
+
+    return (
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+            <div className="w-full max-w-sm">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <Receipt className="w-8 h-8 text-primary-foreground"/>
+                    </div>
+                    <h1 className="text-2xl font-bold text-foreground">КассаPRO</h1>
+                    <p className="text-muted-foreground text-sm mt-1 font-mono">Терминал №3 · ИНН 7701234567</p>
+                    {posAuth.user && (
+                        <div className="mt-3 flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+                            <UserCircle className="w-4 h-4"/>
+                            <span>{posAuth.user.name}</span>
+                            <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-md">{posAuth.user.role}</span>
+                        </div>
+                    )}
+                </div>
+
+                {step === "form" ? (
+                    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                        <div className="px-6 pt-6 pb-2">
+                            <div className="flex items-center gap-2 mb-5">
+                                <LogIn className="w-5 h-5 text-primary"/>
+                                <h2 className="font-bold text-foreground">Открытие смены
+                                    №{posStore.shiftNumber + 1}</h2>
+                            </div>
+                            <div className="mb-4">
+                                <label
+                                    className="text-xs text-muted-foreground uppercase tracking-wide mb-2 block">Кассир</label>
+                                <div className="space-y-1.5">
+                                    {CASHIERS.map(c => (
+                                        <button key={c} onClick={() => setCashier(c)}
+                                                className={`w-full flex items-center gap-3 h-11 px-4 rounded-xl border text-sm font-medium transition-all ${cashier === c ? "bg-primary/10 border-primary/30 text-primary" : "bg-secondary border-border text-foreground hover:border-primary/30"}`}>
+                                            <User className="w-4 h-4"/>{c}
+                                            {cashier === c && <CheckCircle2 className="w-4 h-4 ml-auto"/>}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="mb-5">
+                                <label className="text-xs text-muted-foreground uppercase tracking-wide mb-2 block">Остаток
+                                    наличных</label>
+                                <div
+                                    className="bg-secondary border border-border rounded-xl px-4 py-3 flex items-baseline justify-between mb-3">
+                                    <span className="text-muted-foreground text-sm">Сумма</span>
+                                    <span className="font-mono text-xl font-bold text-foreground">{fmt(cashAmt)}</span>
+                                </div>
+                                <NumPad value={cashStr} onChange={setCashStr}/>
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6">
+                            <button onClick={() => setStep("confirm")}
+                                    className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                                <LogIn className="w-4 h-4"/>Продолжить
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                        <div className="p-6">
+                            <h2 className="font-bold text-foreground mb-4">Подтвердите открытие смены</h2>
+                            <div className="space-y-3 mb-6">
+                                {[
+                                    {
+                                        icon: <BarChart3 className="w-4 h-4"/>,
+                                        label: "Смена",
+                                        val: `№${posStore.shiftNumber + 1}`
+                                    },
+                                    {icon: <User className="w-4 h-4"/>, label: "Кассир", val: cashier},
+                                    {icon: <Clock className="w-4 h-4"/>, label: "Время", val: nowStr(), mono: true},
+                                    {
+                                        icon: <Wallet className="w-4 h-4"/>,
+                                        label: "Наличные",
+                                        val: fmt(cashAmt),
+                                        mono: true
+                                    },
+                                ].map(({icon, label, val, mono}) => (
+                                    <div key={label}
+                                         className="flex justify-between items-center py-3 border-b border-border last:border-0">
+                                        <span
+                                            className="text-muted-foreground text-sm flex items-center gap-2">{icon}{label}</span>
+                                        <span
+                                            className={`font-semibold text-foreground ${mono ? "font-mono" : ""}`}>{val}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => setStep("form")}
+                                        className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors">
+                                    Назад
+                                </button>
+                                <button onClick={() => onOpen(cashier, cashAmt)}
+                                        className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                                    <LogIn className="w-4 h-4"/>Открыть
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 )}
-                {inCart && (
-                  <span className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center text-xs font-bold text-primary-foreground">
+            </div>
+        </div>
+    );
+});
+
+// ─── Shift Close Modal ────────────────────────────────────────────────────────
+
+const ShiftCloseModal = observer(({onClose, onConfirm}: { onClose: () => void; onConfirm: () => void }) => {
+    const {posStore} = useStore();
+    const shift = posStore.currentShift!;
+    const receipts = posStore.completedReceipts;
+    const cashTotal = receipts.reduce((s, r) => s + (r.paymentMethod === "cash" ? r.cashPaid : 0), 0);
+    const cardTotal = receipts.reduce((s, r) => s + (r.paymentMethod === "card" ? r.total : 0), 0);
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+            <div
+                className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[95vh] flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+                    <div className="flex items-center gap-2">
+                        <LogOut className="w-5 h-5 text-destructive"/>
+                        <h2 className="font-bold text-foreground">Закрытие смены №{shift.number}</h2>
+                    </div>
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                    <div className="grid grid-cols-3 gap-3">
+                        {[
+                            {icon: <User className="w-4 h-4"/>, label: "Кассир", val: shift.cashier},
+                            {icon: <Clock className="w-4 h-4"/>, label: "Открыта", val: shift.openTime},
+                            {icon: <Receipt className="w-4 h-4"/>, label: "Чеков", val: String(receipts.length)},
+                        ].map(({icon, label, val}) => (
+                            <div key={label} className="bg-secondary rounded-xl p-3 text-center">
+                                <div className="flex justify-center text-muted-foreground mb-1">{icon}</div>
+                                <p className="text-xs text-muted-foreground">{label}</p>
+                                <p className="font-semibold text-foreground text-sm mt-0.5 truncate">{val}</p>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="bg-secondary rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-border">
+                            <p className="text-sm font-semibold text-foreground flex items-center gap-2"><TrendingUp
+                                className="w-4 h-4 text-primary"/>Выручка</p>
+                        </div>
+                        <div className="divide-y divide-border">
+                            <div className="flex justify-between px-4 py-3">
+                                <span className="text-sm text-muted-foreground flex items-center gap-2"><Banknote
+                                    className="w-4 h-4"/>Наличные</span>
+                                <span className="font-mono font-semibold text-foreground">{fmt(cashTotal)}</span>
+                            </div>
+                            <div className="flex justify-between px-4 py-3">
+                                <span className="text-sm text-muted-foreground flex items-center gap-2"><CreditCard
+                                    className="w-4 h-4"/>Карта</span>
+                                <span className="font-mono font-semibold text-foreground">{fmt(cardTotal)}</span>
+                            </div>
+                            <div className="flex justify-between px-4 py-3 bg-primary/5">
+                                <span className="text-sm font-bold text-foreground">Итого</span>
+                                <span
+                                    className="font-mono font-bold text-primary text-lg">{fmt(cashTotal + cardTotal)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 flex gap-2">
+                        <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5"/>
+                        <p className="text-xs text-destructive/80">После закрытия смены операции невозможны до открытия
+                            новой.</p>
+                    </div>
+                </div>
+                <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
+                    <button onClick={onClose}
+                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors">
+                        Отмена
+                    </button>
+                    <button onClick={onConfirm}
+                            className="flex-1 h-12 bg-destructive text-destructive-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                        <Lock className="w-4 h-4"/>Закрыть смену
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+// ─── Shift Closed Screen ──────────────────────────────────────────────────────
+
+const ShiftClosedScreen = observer(({shift, onNewShift}: {
+    shift: { number: number; cashier: string; openTime: string; openCash: number };
+    onNewShift: () => void;
+}) => {
+    const {posStore} = useStore();
+    const receipts = posStore.completedReceipts;
+    const cashTotal = receipts.reduce((s, r) => s + (r.paymentMethod === "cash" ? r.cashPaid : 0), 0);
+    const cardTotal = receipts.reduce((s, r) => s + (r.paymentMethod === "card" ? r.total : 0), 0);
+
+    return (
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+            <div className="w-full max-w-sm">
+                <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                    <div className="bg-muted border-b border-border p-6 text-center">
+                        <div
+                            className="w-14 h-14 bg-muted-foreground/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Lock className="w-7 h-7 text-muted-foreground"/>
+                        </div>
+                        <h2 className="text-xl font-bold text-foreground">Смена №{shift.number} закрыта</h2>
+                        <p className="text-muted-foreground text-sm mt-1">{nowStr()}</p>
+                    </div>
+                    <div className="p-5 space-y-3">
+                        {[
+                            {label: "Кассир", val: shift.cashier},
+                            {label: "Открыта", val: shift.openTime, mono: true},
+                            {label: "Чеков пробито", val: String(receipts.length)},
+                            {label: "Наличные", val: fmt(cashTotal), mono: true},
+                            {label: "Карта", val: fmt(cardTotal), mono: true},
+                            {label: "Итого выручка", val: fmt(cashTotal + cardTotal), bold: true, mono: true},
+                            {
+                                label: "В ящике",
+                                val: fmt(shift.openCash + cashTotal),
+                                bold: true,
+                                accent: true,
+                                mono: true
+                            },
+                        ].map(({label, val, bold, accent, mono}) => (
+                            <div key={label}
+                                 className="flex justify-between items-center py-2 border-b border-border last:border-0">
+                                <span className="text-sm text-muted-foreground">{label}</span>
+                                <span
+                                    className={`text-sm ${bold ? "font-bold" : ""} ${accent ? "text-accent" : "text-foreground"} ${mono ? "font-mono" : ""}`}>{val}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="p-5 pt-0">
+                        <button onClick={onNewShift}
+                                className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                            <LogIn className="w-4 h-4"/>Открыть новую смену
+                        </button>
+                    </div>
+                </div>
+                <p className="text-center text-muted-foreground text-xs mt-4 font-mono">ООО «РОМАШКА» · ФН
+                    9999078900012345</p>
+            </div>
+        </div>
+    );
+});
+
+// ─── OFD Status Badge ─────────────────────────────────────────────────────────
+
+const OfdStatusBadge = observer(({receiptId}: { receiptId?: string }) => {
+    const {receiptStore} = useStore();
+    if (!receiptId) return null;
+    const sent = receiptStore.history.find(r => r.receiptId === receiptId);
+    if (!sent) return null;
+    const cfgs = {
+        sending: {
+            icon: <Loader2 className="w-3.5 h-3.5 animate-spin"/>,
+            label: "Отправка в ОФД...",
+            cls: "bg-accent/10 text-accent border-accent/20"
+        },
+        polling: {
+            icon: <Loader2 className="w-3.5 h-3.5 animate-spin"/>,
+            label: "Обработка ФН...",
+            cls: "bg-accent/10 text-accent border-accent/20"
+        },
+        confirmed: {
+            icon: <CheckCircle2 className="w-3.5 h-3.5"/>,
+            label: "Фискализирован",
+            cls: "bg-primary/10 text-primary border-primary/20"
+        },
+        error: {
+            icon: <AlertTriangle className="w-3.5 h-3.5"/>,
+            label: sent.error ?? "Ошибка ОФД",
+            cls: "bg-destructive/10 text-destructive border-destructive/20"
+        },
+        idle: null as null,
+    };
+    const cfg = cfgs[sent.status];
+    if (!cfg) return null;
+    return (
+        <div className={`flex items-center gap-1.5 rounded-lg px-3 py-2 border text-xs font-medium ${cfg.cls}`}>
+            {cfg.icon}<span>{cfg.label}</span>
+            {sent.status === "confirmed" && sent.fiscalData?.FiscalSign && (
+                <span className="font-mono opacity-70">· ФП {sent.fiscalData.FiscalSign}</span>
+            )}
+        </div>
+    );
+});
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+
+export default observer(function App() {
+    const {auth, posAuth, posStore, receiptStore} = useStore();
+
+    // Local UI state
+    const [category, setCategory] = useState("Все");
+    const [search, setSearch] = useState("");
+    const [view, setView] = useState<AppView>("pos");
+    const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
+    const [cashInput, setCashInput] = useState("0");
+    const [discount, setDiscount] = useState(0);
+    const [mobileTab, setMobileTab] = useState<MobileTab>("catalog");
+    const [showProductModal, setShowProductModal] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+    const [showCloseModal, setShowCloseModal] = useState(false);
+    const [showOfdSettings, setShowOfdSettings] = useState(false);
+    const [showApiSettings, setShowApiSettings] = useState(false);
+    const [scanningProductId, setScanningProductId] = useState<number | null>(null);
+    const [isPaying, setIsPaying] = useState(false);
+    const [lastReceipt, setLastReceipt] = useState<{
+        items: CartItem[]; total: number; cash: number; change: number;
+        method: PaymentMethod; time: string; fermaReceiptId?: string;
+    } | null>(null);
+    const [closedShiftSnap, setClosedShiftSnap] = useState<{
+        number: number; cashier: string; openTime: string; openCash: number;
+    } | null>(null);
+
+    // Auto-connect OFD on mount
+    useEffect(() => {
+        if (!auth.isConnected && !auth.isLoading) auth.authenticate();
+    }, []);
+
+    const allCategories = ["Все", ...posStore.categories];
+    const subtotal = posStore.cartTotal;
+    const discountAmt = Math.round(subtotal * discount / 100);
+    const total = subtotal - discountAmt;
+    const tax = Math.round(total * TAX_RATE / (1 + TAX_RATE));
+    const cashNum = parseInt(cashInput) || 0;
+    const change = cashNum - total;
+    const cartCount = posStore.cartItemCount;
+    const missingCodes = posStore.missingMarkCodes;
+    const canPay = posStore.canPay;
+
+    const filtered = posStore.products.filter(p =>
+        (category === "Все" || p.category === category) &&
+        (search === "" || p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search))
+    );
+
+    const scanningItem = scanningProductId !== null
+        ? posStore.cart.find(i => i.product.id === scanningProductId) ?? null
+        : null;
+
+    const handlePay = useCallback(async () => {
+        if (!canPay || isPaying) return;
+        if (payMethod === "cash" && cashNum < total) return;
+        setIsPaying(true);
+        const cartSnapshot = posStore.cart.map(i => ({...i}));
+        const result = await posStore.processPayment(
+            payMethod,
+            payMethod === "cash" ? cashNum : 0,
+            payMethod === "card" ? total : 0
+        );
+        setIsPaying(false);
+        if (result) {
+            setLastReceipt({
+                items: cartSnapshot,
+                total: result.total,
+                cash: result.cashPaid,
+                change: result.change,
+                method: result.paymentMethod,
+                time: result.time,
+                fermaReceiptId: result.fermaReceiptId,
+            });
+            setView("receipt");
+            setCashInput("0");
+            setDiscount(0);
+        }
+    }, [canPay, isPaying, payMethod, cashNum, total, posStore]);
+
+    // ── Auth gate ─────────────────────────────────────────────────────────────
+
+    if (!posAuth.isAuthenticated) {
+        return (
+            <>
+                <LoginScreen onShowApiSettings={() => setShowApiSettings(true)}/>
+                {showApiSettings && <ApiSettingsModal onClose={() => setShowApiSettings(false)}/>}
+            </>
+        );
+    }
+
+    // ── Shift screens ─────────────────────────────────────────────────────────
+
+    if (posStore.shiftState === "closed") {
+        return (
+            <>
+                <ShiftOpenScreen onOpen={(cashier, cash) => posStore.openShift(cashier, cash)}/>
+                {showOfdSettings && <OfdSettingsModal onClose={() => setShowOfdSettings(false)}/>}
+                {showApiSettings && <ApiSettingsModal onClose={() => setShowApiSettings(false)}/>}
+            </>
+        );
+    }
+
+    if (posStore.shiftState === "closing" && closedShiftSnap) {
+        return (
+            <ShiftClosedScreen
+                shift={closedShiftSnap}
+                onNewShift={() => {
+                    posStore.startNewShift();
+                    setClosedShiftSnap(null);
+                }}
+            />
+        );
+    }
+
+    // ── Receipt screen ────────────────────────────────────────────────────────
+
+    if (view === "receipt" && lastReceipt) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center p-4">
+                <div className="w-full max-w-md">
+                    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                        <div className="bg-primary/10 border-b border-border p-6 text-center">
+                            <CheckCircle2 className="w-12 h-12 text-primary mx-auto mb-3"/>
+                            <h2 className="text-xl font-bold text-foreground">Оплата прошла</h2>
+                            <p className="text-muted-foreground text-sm mt-1">{lastReceipt.time}</p>
+                        </div>
+                        {lastReceipt.fermaReceiptId && (
+                            <div className="px-5 pt-4"><OfdStatusBadge receiptId={lastReceipt.fermaReceiptId}/></div>
+                        )}
+                        {posStore.lastOfdError && !lastReceipt.fermaReceiptId && (
+                            <div className="px-5 pt-4">
+                                <div
+                                    className="flex items-center gap-1.5 rounded-lg px-3 py-2 border bg-destructive/10 text-destructive border-destructive/20 text-xs">
+                                    <WifiOff className="w-3.5 h-3.5"/>{posStore.lastOfdError}
+                                </div>
+                            </div>
+                        )}
+                        <div className="p-5 space-y-2">
+                            {lastReceipt.items.map((i, idx) => (
+                                <div key={idx}>
+                                    <div className="flex justify-between text-sm">
+                    <span className="text-foreground flex items-center gap-1.5">
+                      {i.product.isMarked && <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0"/>}
+                        {i.product.name} <span className="text-muted-foreground">×{i.qty}</span>
+                    </span>
+                                        <span
+                                            className="font-mono font-semibold text-foreground">{fmt(i.product.price * i.qty)}</span>
+                                    </div>
+                                    {i.product.isMarked && i.markCodes.map((c, ci) => (
+                                        <p key={ci}
+                                           className="text-xs font-mono text-muted-foreground pl-5 mt-0.5 truncate">↳ {c}</p>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="border-t border-border mx-5"/>
+                        <div className="p-5 space-y-2 text-sm">
+                            <div className="flex justify-between text-muted-foreground">
+                                <span>НДС 20%</span><span className="font-mono">{fmt(tax)}</span>
+                            </div>
+                            <div className="flex justify-between text-lg font-bold text-foreground">
+                                <span>ИТОГО</span><span
+                                className="font-mono text-primary">{fmt(lastReceipt.total)}</span>
+                            </div>
+                            {lastReceipt.method === "cash" && (
+                                <>
+                                    <div className="flex justify-between text-muted-foreground">
+                                        <span>Принято</span><span className="font-mono">{fmt(lastReceipt.cash)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-accent font-semibold">
+                                        <span>Сдача</span><span className="font-mono">{fmt(lastReceipt.change)}</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        <div className="p-5 pt-0">
+                            <button onClick={() => {
+                                setView("pos");
+                                setMobileTab("catalog");
+                                setLastReceipt(null);
+                            }}
+                                    className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity">
+                                Новый чек
+                            </button>
+                        </div>
+                    </div>
+                    <p className="text-center text-muted-foreground text-xs mt-4 font-mono">ООО «РОМАШКА» · ИНН
+                        7701234567 · ФН 9999078900012345</p>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Payment screen ────────────────────────────────────────────────────────
+
+    if (view === "payment") {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center p-4">
+                <div className="w-full max-w-lg bg-card border border-border rounded-2xl overflow-hidden">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                        <h2 className="text-lg font-bold text-foreground">Оплата заказа</h2>
+                        <button onClick={() => setView("pos")}
+                                className="text-muted-foreground hover:text-foreground transition-colors">
+                            <X className="w-5 h-5"/>
+                        </button>
+                    </div>
+                    <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(100vh-80px)]">
+                        <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 text-center">
+                            <p className="text-muted-foreground text-sm mb-1">К оплате</p>
+                            <p className="text-4xl font-mono font-bold text-primary">{fmt(total)}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            {(["cash", "card"] as PaymentMethod[]).map(m => (
+                                <button key={m} onClick={() => setPayMethod(m)}
+                                        className={`flex items-center justify-center gap-2 h-14 rounded-xl border font-semibold transition-all ${payMethod === m ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-foreground border-border hover:border-primary/50"}`}>
+                                    {m === "cash" ? <Banknote className="w-5 h-5"/> : <CreditCard className="w-5 h-5"/>}
+                                    {m === "cash" ? "Наличные" : "Карта"}
+                                </button>
+                            ))}
+                        </div>
+                        {payMethod === "cash" && (
+                            <div className="space-y-3">
+                                <div
+                                    className="bg-secondary border border-border rounded-xl px-4 py-3 flex items-baseline justify-between">
+                                    <span className="text-muted-foreground text-sm">Принято</span>
+                                    <span className="font-mono text-2xl font-bold text-foreground">{fmt(cashNum)}</span>
+                                </div>
+                                <NumPad value={cashInput} onChange={setCashInput}/>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {[500, 1000, 2000, 5000].map(a => (
+                                        <button key={a} onClick={() => setCashInput(String(a))}
+                                                className="h-9 bg-secondary hover:bg-muted border border-border rounded-lg text-sm font-mono font-semibold text-foreground transition-colors">{a}</button>
+                                    ))}
+                                </div>
+                                {cashNum >= total && (
+                                    <div
+                                        className="bg-accent/10 border border-accent/30 rounded-xl px-4 py-3 flex justify-between">
+                                        <span className="text-accent font-medium">Сдача</span>
+                                        <span className="font-mono text-xl font-bold text-accent">{fmt(change)}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {payMethod === "card" && (
+                            <div className="bg-secondary/50 border border-border rounded-xl p-6 text-center">
+                                <CreditCard className="w-10 h-10 text-muted-foreground mx-auto mb-3"/>
+                                <p className="text-foreground font-medium">Приложите или вставьте карту</p>
+                                <p className="text-muted-foreground text-sm mt-1">Ожидание терминала...</p>
+                            </div>
+                        )}
+                        <button onClick={handlePay}
+                                disabled={(payMethod === "cash" && cashNum < total) || isPaying}
+                                className="w-full h-14 bg-primary text-primary-foreground rounded-xl font-bold text-lg hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                            {isPaying
+                                ? <><Loader2 className="w-5 h-5 animate-spin"/>Отправка в ОФД...</>
+                                : payMethod === "cash"
+                                    ? cashNum >= total ? `Принять — ${fmt(total)}` : `Не хватает ${fmt(total - cashNum)}`
+                                    : `Оплата картой — ${fmt(total)}`}
+                        </button>
+                        <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg border ${
+                            auth.isConnected ? "bg-primary/5 border-primary/20 text-primary" : "bg-muted border-border text-muted-foreground"
+                        }`}>
+                            {auth.isConnected ? <Wifi className="w-3.5 h-3.5 shrink-0"/> :
+                                <WifiOff className="w-3.5 h-3.5 shrink-0"/>}
+                            {auth.isConnected ? "ОФД Ferma® подключён · чек будет отправлен автоматически" : "ОФД не подключён · чек сохраняется локально"}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── POS main screen ───────────────────────────────────────────────────────
+
+    const CatalogPanel = () => (
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+            <div className="px-4 pt-4 pb-3 space-y-3">
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/>
+                        <input value={search} onChange={e => setSearch(e.target.value)}
+                               placeholder="Поиск или штрихкод..."
+                               className="w-full h-10 bg-secondary border border-border rounded-xl pl-9 pr-3 text-sm focus:outline-none focus:border-primary/60 transition-colors"/>
+                    </div>
+                    <button onClick={() => {
+                        setEditingProduct(null);
+                        setShowProductModal(true);
+                    }}
+                            className="h-10 px-3 bg-primary text-primary-foreground rounded-xl font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity shrink-0">
+                        <PackagePlus className="w-4 h-4"/>
+                        <span className="hidden sm:inline text-sm">Товар</span>
+                    </button>
+                </div>
+
+                {/* Products loading indicator */}
+                {posStore.isLoadingProducts && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                        Загрузка товаров из БД...
+                    </div>
+                )}
+                {posStore.productsError && (
+                    <div className="flex items-center gap-2 text-xs text-accent px-1">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
+                        {posStore.productsError}
+                    </div>
+                )}
+                {posStore.productsFromApi && (
+                    <div className="flex items-center gap-2 text-xs text-primary px-1">
+                        <Database className="w-3.5 h-3.5"/>
+                        Товары синхронизированы с MySQL
+                    </div>
+                )}
+
+                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {allCategories.map(c => (
+                        <button key={c} onClick={() => setCategory(c)}
+                                className={`shrink-0 px-4 h-8 rounded-lg text-sm font-medium transition-all ${category === c ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground border border-border"}`}>
+                            {c}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {filtered.map(p => {
+                        const inCart = posStore.cart.find(i => i.product.id === p.id);
+                        return (
+                            <div key={p.id}
+                                 className={`relative text-left bg-card border rounded-xl p-3 transition-all group ${inCart ? "border-primary/40 bg-primary/5" : "border-border"}`}>
+                                {/* Edit / Delete buttons on hover */}
+                                <div className="absolute top-2 right-2 hidden group-hover:flex gap-1">
+                                    <button
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            setEditingProduct(p);
+                                            setShowProductModal(true);
+                                        }}
+                                        className="w-6 h-6 bg-secondary border border-border rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                                        <Pencil className="w-3 h-3"/>
+                                    </button>
+                                    <button
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            posStore.deleteProduct(p.id, posAuth.token);
+                                        }}
+                                        className="w-6 h-6 bg-secondary border border-border rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors">
+                                        <Trash className="w-3 h-3"/>
+                                    </button>
+                                </div>
+                                {p.isMarked && (
+                                    <span
+                                        className="absolute top-2 left-2 flex items-center gap-0.5 bg-primary/15 text-primary text-[10px] font-semibold px-1.5 py-0.5 rounded-md">
+                    <ShieldCheck className="w-2.5 h-2.5"/>М
+                  </span>
+                                )}
+                                {inCart && (
+                                    <span
+                                        className="absolute bottom-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center text-xs font-bold text-primary-foreground">
                     {inCart.qty}
                   </span>
+                                )}
+                                <button className="w-full text-left" onClick={() => posStore.addToCart(p)}>
+                                    <div className="text-3xl mb-2 mt-1">{p.emoji}</div>
+                                    <p className="text-sm font-medium text-foreground leading-tight line-clamp-2">{p.name}</p>
+                                    <p className="text-primary font-mono font-bold text-sm mt-2">{fmt(p.price)}</p>
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+                {filtered.length === 0 && !posStore.isLoadingProducts && (
+                    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                        <Search className="w-10 h-10 mb-3 opacity-30"/>
+                        <p>Товар не найден</p>
+                        <button onClick={() => {
+                            setEditingProduct(null);
+                            setShowProductModal(true);
+                        }}
+                                className="mt-4 px-4 h-9 bg-primary/10 text-primary border border-primary/20 rounded-lg text-sm font-medium hover:bg-primary/20 transition-colors flex items-center justify-center gap-2">
+                            <Plus className="w-4 h-4"/>Добавить новый
+                        </button>
+                    </div>
                 )}
-                <div className="text-3xl mb-2 mt-1">{p.emoji}</div>
-                <p className="text-sm font-medium text-foreground leading-tight line-clamp-2">{p.name}</p>
-                <p className="text-primary font-mono font-bold text-sm mt-2">{fmt(p.price)}</p>
-              </button>
-            );
-          })}
-        </div>
-        {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Search className="w-10 h-10 mb-3 opacity-30" />
-            <p>Товар не найден</p>
-            <button onClick={() => setShowAddModal(true)}
-              className="mt-4 px-4 h-9 bg-primary/10 text-primary border border-primary/20 rounded-lg text-sm font-medium hover:bg-primary/20 transition-colors flex items-center gap-1.5">
-              <Plus className="w-4 h-4" /> Добавить новый
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── Cart panel ────────────────────────────────────────────────────────────
-  const CartPanel = ({ fullWidth = false }: { fullWidth?: boolean }) => (
-    <div className={`flex flex-col ${fullWidth ? "flex-1" : "w-80 xl:w-96 shrink-0 border-l border-border"} bg-card`}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="w-4 h-4 text-muted-foreground" />
-          <span className="font-semibold text-foreground text-sm">Чек</span>
-          {cartCount > 0 && (
-            <span className="bg-primary/20 text-primary text-xs font-mono font-bold px-2 py-0.5 rounded-full">{cartCount}</span>
-          )}
-        </div>
-        {cart.length > 0 && (
-          <button onClick={clearCart} className="text-muted-foreground hover:text-destructive transition-colors p-1">
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Missing codes warning */}
-      {missingCodes.length > 0 && (
-        <div className="mx-3 mt-3 bg-accent/10 border border-accent/30 rounded-xl px-3 py-2.5 flex gap-2">
-          <AlertTriangle className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-          <div>
-            <p className="text-accent text-xs font-semibold">Требуются коды маркировки</p>
-            <p className="text-accent/80 text-xs mt-0.5">
-              {missingCodes.map(i => i.name).join(", ")}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {cart.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
-            <ShoppingCart className="w-12 h-12 mb-3 opacity-20" />
-            <p className="text-sm">Добавьте товары из каталога</p>
-          </div>
-        ) : (
-          cart.map(item => {
-            const codesOk = !item.isMarked || item.markCodes.length >= item.qty;
-            const codesPartial = item.isMarked && item.markCodes.length > 0 && item.markCodes.length < item.qty;
-            return (
-              <div key={item.id} className={`flex items-start gap-3 rounded-xl px-3 py-2.5 border transition-colors
-                ${!codesOk ? "bg-accent/5 border-accent/20" : "bg-secondary border-transparent"}`}>
-                <span className="text-xl shrink-0 mt-0.5">{item.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
-                    <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
-                    {item.isMarked && (
-                      <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${codesOk ? "text-primary" : "text-accent"}`} />
-                    )}
-                  </div>
-                  <p className="text-xs font-mono text-muted-foreground">{fmt(item.price)} × {item.qty}</p>
-                  {/* Mark codes status */}
-                  {item.isMarked && (
-                    <button onClick={() => setScanningItem(item)}
-                      className={`mt-1.5 flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors
-                        ${codesOk
-                          ? "bg-primary/10 text-primary hover:bg-primary/20"
-                          : "bg-accent/15 text-accent hover:bg-accent/25"}`}>
-                      <ScanLine className="w-3 h-3" />
-                      {codesOk
-                        ? `${item.markCodes.length}/${item.qty} кодов ✓`
-                        : codesPartial
-                          ? `${item.markCodes.length}/${item.qty} — добавить`
-                          : "Сканировать коды"}
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  <p className="text-sm font-mono font-bold text-foreground">{fmt(item.price * item.qty)}</p>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(item.id, -1)} className="w-6 h-6 rounded-md bg-muted hover:bg-border flex items-center justify-center transition-colors">
-                      <Minus className="w-3 h-3 text-foreground" />
-                    </button>
-                    <span className="w-6 text-center text-xs font-mono font-bold text-foreground">{item.qty}</span>
-                    <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 rounded-md bg-muted hover:bg-border flex items-center justify-center transition-colors">
-                      <Plus className="w-3 h-3 text-foreground" />
-                    </button>
-                    <button onClick={() => removeItem(item.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-destructive/10 flex items-center justify-center transition-colors ml-0.5">
-                      <X className="w-3 h-3 text-muted-foreground" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Discount */}
-      {cart.length > 0 && (
-        <div className="px-4 pb-2">
-          <div className="flex gap-1.5">
-            {[0, 5, 10, 15].map(d => (
-              <button key={d} onClick={() => setDiscount(d)}
-                className={`flex-1 h-8 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1
-                  ${discount === d ? "bg-accent text-accent-foreground"
-                    : "bg-secondary text-muted-foreground border border-border hover:border-accent/50"}`}>
-                {d === 0 ? "—" : <><Tag className="w-2.5 h-2.5" />{d}%</>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Totals */}
-      <div className="border-t border-border px-4 py-4 space-y-2">
-        {cart.length > 0 && (
-          <>
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Товаров</span><span className="font-mono">{fmt(subtotal)}</span>
             </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-sm text-accent">
-                <span>Скидка {discount}%</span><span className="font-mono">− {fmt(discountAmt)}</span>
-              </div>
+        </div>
+    );
+
+    const CartPanel = ({fullWidth = false}: { fullWidth?: boolean }) => (
+        <div
+            className={`flex flex-col ${fullWidth ? "flex-1" : "w-80 xl:w-96 shrink-0 border-l border-border"} bg-card`}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-muted-foreground"/>
+                    <span className="font-semibold text-foreground text-sm">Чек</span>
+                    {cartCount > 0 && <span
+						className="bg-primary/20 text-primary text-xs font-mono font-bold px-2 py-0.5 rounded-full">{cartCount}</span>}
+                </div>
+                {posStore.cart.length > 0 && (
+                    <button onClick={() => posStore.clearCart()}
+                            className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                        <Trash2 className="w-4 h-4"/>
+                    </button>
+                )}
+            </div>
+
+            {missingCodes.length > 0 && (
+                <div className="mx-3 mt-3 bg-accent/10 border border-accent/30 rounded-xl px-3 py-2.5 flex gap-2">
+                    <AlertTriangle className="w-4 h-4 text-accent shrink-0 mt-0.5"/>
+                    <div>
+                        <p className="text-accent text-xs font-semibold">Требуются коды маркировки</p>
+                        <p className="text-accent/80 text-xs mt-0.5">{missingCodes.map(i => i.product.name).join(", ")}</p>
+                    </div>
+                </div>
             )}
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>НДС 20%</span><span className="font-mono">{fmt(tax)}</span>
+
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+                {posStore.cart.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
+                        <ShoppingCart className="w-12 h-12 mb-3 opacity-20"/>
+                        <p className="text-sm">Добавьте товары из каталога</p>
+                    </div>
+                ) : (
+                    posStore.cart.map(item => {
+                        const codesOk = !item.product.isMarked || item.markCodes.length >= item.qty;
+                        const codesPartial = item.product.isMarked && item.markCodes.length > 0 && item.markCodes.length < item.qty;
+                        return (
+                            <div key={item.product.id}
+                                 className={`flex items-start gap-3 rounded-xl px-3 py-2.5 border transition-colors ${!codesOk ? "bg-accent/5 border-accent/20" : "bg-secondary border-transparent"}`}>
+                                <span className="text-xl shrink-0 mt-0.5">{item.product.emoji}</span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1">
+                                        <p className="text-sm font-medium text-foreground truncate">{item.product.name}</p>
+                                        {item.product.isMarked && <ShieldCheck
+											className={`w-3.5 h-3.5 shrink-0 ${codesOk ? "text-primary" : "text-accent"}`}/>}
+                                    </div>
+                                    <p className="text-xs font-mono text-muted-foreground">{fmt(item.product.price)} × {item.qty}</p>
+                                    {item.product.isMarked && (
+                                        <button onClick={() => setScanningProductId(item.product.id)}
+                                                className={`mt-1.5 flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${codesOk ? "bg-primary/10 text-primary hover:bg-primary/20" : "bg-accent/15 text-accent hover:bg-accent/25"}`}>
+                                            <ScanLine className="w-3 h-3"/>
+                                            {codesOk ? `${item.markCodes.length}/${item.qty} ✓` : codesPartial ? `${item.markCodes.length}/${item.qty} — добавить` : "Сканировать коды"}
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                    <p className="text-sm font-mono font-bold text-foreground">{fmt(item.product.price * item.qty)}</p>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => posStore.changeQty(item.product.id, -1)}
+                                                className="w-6 h-6 rounded-md bg-muted hover:bg-border flex items-center justify-center transition-colors">
+                                            <Minus className="w-3 h-3"/></button>
+                                        <span className="w-6 text-center text-xs font-mono font-bold">{item.qty}</span>
+                                        <button onClick={() => posStore.changeQty(item.product.id, 1)}
+                                                className="w-6 h-6 rounded-md bg-muted hover:bg-border flex items-center justify-center transition-colors">
+                                            <Plus className="w-3 h-3"/></button>
+                                        <button onClick={() => posStore.removeFromCart(item.product.id)}
+                                                className="w-6 h-6 rounded-md bg-muted hover:bg-destructive/10 flex items-center justify-center transition-colors ml-0.5">
+                                            <X className="w-3 h-3 text-muted-foreground"/></button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
-          </>
-        )}
-        <div className="flex justify-between items-baseline pt-1">
-          <span className="text-foreground font-bold">ИТОГО</span>
-          <span className="text-2xl font-mono font-bold text-primary">{fmt(total)}</span>
-        </div>
-        <button
-          onClick={() => canPay && setView("payment")}
-          disabled={!canPay}
-          className="w-full h-12 mt-1 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-          {missingCodes.length > 0
-            ? <><AlertTriangle className="w-4 h-4" />Нужны коды маркировки</>
-            : <>Оплатить <ChevronRight className="w-5 h-5" /></>}
-        </button>
-      </div>
-    </div>
-  );
 
-  return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
-            <Receipt className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <p className="text-foreground font-bold text-sm leading-none">КассаPRO</p>
-            <p className="text-muted-foreground text-xs mt-0.5 font-mono hidden sm:block">
-              Смена №412 • Кассир: Иванова А.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="text-right hidden xs:block">
-            <p className="text-muted-foreground text-xs">Выручка</p>
-            <p className="text-accent font-mono font-bold text-sm">87 340 ₽</p>
-          </div>
-          <div className="w-px h-7 bg-border hidden xs:block" />
-          <div className="text-right">
-            <p className="text-muted-foreground text-xs">Чеков</p>
-            <p className="text-foreground font-mono font-bold text-sm">47</p>
-          </div>
-        </div>
-      </header>
+            {posStore.cart.length > 0 && (
+                <div className="px-4 pb-2">
+                    <div className="flex gap-1.5">
+                        {[0, 5, 10, 15].map(d => (
+                            <button key={d} onClick={() => setDiscount(d)}
+                                    className={`flex-1 h-8 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${discount === d ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground border border-border hover:border-accent/50"}`}>
+                                {d === 0 ? "—" : <><Tag className="w-2.5 h-2.5"/>{d}%</>}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Desktop */}
-        <div className="hidden md:flex flex-1 overflow-hidden">
-          <CatalogPanel />
-          <CartPanel />
-        </div>
-        {/* Mobile */}
-        <div className="flex flex-col flex-1 overflow-hidden md:hidden">
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {mobileTab === "catalog" ? <CatalogPanel /> : <CartPanel fullWidth />}
-          </div>
-          <div className="shrink-0 border-t border-border bg-card flex">
-            <button onClick={() => setMobileTab("catalog")}
-              className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-colors
-                ${mobileTab === "catalog" ? "text-primary" : "text-muted-foreground"}`}>
-              <LayoutGrid className="w-5 h-5" />
-              <span className="text-xs font-medium">Каталог</span>
-            </button>
-            <button onClick={() => setMobileTab("cart")}
-              className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 relative transition-colors
-                ${mobileTab === "cart" ? "text-primary" : "text-muted-foreground"}`}>
-              <div className="relative">
-                <ListOrdered className="w-5 h-5" />
-                {cartCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                    {cartCount}
-                  </span>
+            <div className="border-t border-border px-4 py-4 space-y-2">
+                {posStore.cart.length > 0 && (
+                    <>
+                        <div className="flex justify-between text-sm text-muted-foreground"><span>Товаров</span><span
+                            className="font-mono">{fmt(subtotal)}</span></div>
+                        {discount > 0 && <div className="flex justify-between text-sm text-accent">
+							<span>Скидка {discount}%</span><span className="font-mono">− {fmt(discountAmt)}</span>
+						</div>}
+                        <div className="flex justify-between text-sm text-muted-foreground"><span>НДС 20%</span><span
+                            className="font-mono">{fmt(tax)}</span></div>
+                    </>
                 )}
-                {missingCodes.length > 0 && (
-                  <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-accent rounded-full border-2 border-card" />
-                )}
-              </div>
-              <span className="text-xs font-medium">Чек {total > 0 ? `· ${fmt(total)}` : ""}</span>
-            </button>
-          </div>
+                <div className="flex justify-between items-baseline pt-1">
+                    <span className="text-foreground font-bold">ИТОГО</span>
+                    <span className="text-2xl font-mono font-bold text-primary">{fmt(total)}</span>
+                </div>
+                <button onClick={() => canPay && setView("payment")} disabled={!canPay}
+                        className="w-full h-12 mt-1 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    {missingCodes.length > 0 ? <><AlertTriangle className="w-4 h-4"/>Нужны коды
+                        маркировки</> : <>Оплатить <ChevronRight className="w-5 h-5"/></>}
+                </button>
+            </div>
         </div>
-      </div>
+    );
 
-      {/* Add product modal */}
-      {showAddModal && (
-        <AddProductModal
-          existingCategories={products.map(p => p.category)}
-          onAdd={handleAddProduct}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+    return (
+        <div className="h-screen bg-background flex flex-col overflow-hidden">
+            {/* Header */}
+            <header
+                className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-border bg-card shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
+                        <Receipt className="w-4 h-4 text-primary-foreground"/>
+                    </div>
+                    <div>
+                        <p className="text-foreground font-bold text-sm leading-none">КассаPRO</p>
+                        <p className="text-muted-foreground text-xs mt-0.5 font-mono hidden sm:block">
+                            Смена №{posStore.currentShift?.number} · {posStore.currentShift?.cashier}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-3">
+                    {/* User badge */}
+                    {posAuth.user && (
+                        <div
+                            className="hidden sm:flex items-center gap-1.5 h-7 px-2.5 bg-secondary border border-border rounded-lg text-xs text-muted-foreground">
+                            <UserCircle className="w-3.5 h-3.5"/>
+                            <span>{posAuth.user.name}</span>
+                        </div>
+                    )}
 
-      {/* Mark scan modal */}
-      {scanningItem && (
-        <MarkScanModal
-          item={cart.find(i => i.id === scanningItem.id) ?? scanningItem}
-          onSave={(codes) => saveMarkCodes(scanningItem.id, codes)}
-          onClose={() => setScanningItem(null)}
-        />
-      )}
-    </div>
-  );
-}
+                    {/* OFD indicator */}
+                    <button onClick={() => setShowOfdSettings(true)}
+                            className={`hidden sm:flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-medium transition-colors ${auth.isConnected ? "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10" : "bg-muted border-border text-muted-foreground hover:border-primary/30"}`}>
+                        {auth.isLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : auth.isConnected ?
+                            <Wifi className="w-3 h-3"/> : <WifiOff className="w-3 h-3"/>}
+                        <span className="hidden md:inline">ОФД</span>
+                    </button>
+
+                    <div className="text-right hidden sm:block">
+                        <p className="text-muted-foreground text-xs">Выручка</p>
+                        <p className="text-accent font-mono font-bold text-sm">{fmt(posStore.shiftRevenue)}</p>
+                    </div>
+                    <div className="w-px h-7 bg-border hidden sm:block"/>
+                    <div className="text-right hidden xs:block">
+                        <p className="text-muted-foreground text-xs">Чеков</p>
+                        <p className="text-foreground font-mono font-bold text-sm">{posStore.completedReceipts.length}</p>
+                    </div>
+                    <div className="w-px h-7 bg-border"/>
+
+                    {/* Settings (mobile) */}
+                    <button onClick={() => setShowApiSettings(true)}
+                            className="sm:hidden flex items-center justify-center w-8 h-8 rounded-lg bg-secondary border border-border text-muted-foreground hover:text-foreground transition-colors">
+                        <Settings className="w-4 h-4"/>
+                    </button>
+
+                    {/* Logout */}
+                    <button onClick={() => {
+                        posStore.closeShift();
+                        posAuth.logout();
+                    }}
+                            className="flex items-center gap-1.5 h-8 px-3 bg-secondary border border-border rounded-lg text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors">
+                        <LogOut className="w-3.5 h-3.5"/>
+                        <span className="hidden sm:inline">Выход</span>
+                    </button>
+
+                    <button onClick={() => setShowCloseModal(true)}
+                            className="flex items-center gap-1.5 h-8 px-3 bg-secondary border border-border rounded-lg text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors">
+                        <Lock className="w-3.5 h-3.5"/>
+                        <span className="hidden sm:inline">Закрыть смену</span>
+                    </button>
+                </div>
+            </header>
+
+            {/* Body */}
+            <div className="flex flex-1 overflow-hidden">
+                <div className="hidden md:flex flex-1 overflow-hidden">
+                    <CatalogPanel/>
+                    <CartPanel/>
+                </div>
+                <div className="flex flex-col flex-1 overflow-hidden md:hidden">
+                    <div className="flex-1 overflow-hidden flex flex-col">
+                        {mobileTab === "catalog" ? <CatalogPanel/> : <CartPanel fullWidth/>}
+                    </div>
+                    <div className="shrink-0 border-t border-border bg-card flex">
+                        <button onClick={() => setMobileTab("catalog")}
+                                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-colors ${mobileTab === "catalog" ? "text-primary" : "text-muted-foreground"}`}>
+                            <LayoutGrid className="w-5 h-5"/>
+                            <span className="text-xs font-medium">Каталог</span>
+                        </button>
+                        <button onClick={() => setMobileTab("cart")}
+                                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 relative transition-colors ${mobileTab === "cart" ? "text-primary" : "text-muted-foreground"}`}>
+                            <div className="relative">
+                                <ListOrdered className="w-5 h-5"/>
+                                {cartCount > 0 && (
+                                    <span
+                                        className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center px-1">{cartCount}</span>
+                                )}
+                                {missingCodes.length > 0 && <span
+									className="absolute -bottom-1 -right-1 w-3 h-3 bg-accent rounded-full border-2 border-card"/>}
+                            </div>
+                            <span className="text-xs font-medium">Чек{total > 0 ? ` · ${fmt(total)}` : ""}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Modals */}
+            {showProductModal && (
+                <ProductModal
+                    existingCategories={posStore.categories}
+                    initial={editingProduct ?? undefined}
+                    onSave={(p) => {
+                        if (editingProduct) {
+                            posStore.updateProduct(editingProduct.id, p, posAuth.token);
+                        } else {
+                            posStore.addProduct(p, posAuth.token);
+                        }
+                        setEditingProduct(null);
+                    }}
+                    onClose={() => {
+                        setShowProductModal(false);
+                        setEditingProduct(null);
+                    }}
+                />
+            )}
+
+            {scanningItem && (
+                <MarkScanModal
+                    item={posStore.cart.find(i => i.product.id === scanningItem.product.id) ?? scanningItem}
+                    onSave={(codes) => posStore.setMarkCodes(scanningItem.product.id, codes)}
+                    onClose={() => setScanningProductId(null)}
+                />
+            )}
+
+            {showCloseModal && posStore.currentShift && (
+                <ShiftCloseModal
+                    onClose={() => setShowCloseModal(false)}
+                    onConfirm={() => {
+                        const snap = {...posStore.currentShift!};
+                        setClosedShiftSnap(snap);
+                        posStore.closeShift();
+                        setShowCloseModal(false);
+                    }}
+                />
+            )}
+
+            {showOfdSettings && <OfdSettingsModal onClose={() => setShowOfdSettings(false)}/>}
+            {showApiSettings && <ApiSettingsModal onClose={() => setShowApiSettings(false)}/>}
+        </div>
+    );
+});
