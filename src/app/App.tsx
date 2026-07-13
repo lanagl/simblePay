@@ -55,7 +55,7 @@ import {
     X,
 } from "lucide-react";
 import {useStore} from "../stores/rootStore";
-import type {CartItem, PaymentMethod, Product} from "../stores/posStore";
+import type {CartItem, Category, PaymentMethod, Product} from "../stores/posStore";
 import type {ReceiptDetail, ReceiptShort} from "../api/ofdApi";
 import {TAXATION_LABELS} from "../api/ofdApi";
 
@@ -63,7 +63,7 @@ import {TAXATION_LABELS} from "../api/ofdApi";
 
 const PRESET_CATEGORIES = ["Напитки", "Выпечка", "Молочные", "Снеки", "Табак"];
 const PRESET_EMOJIS = ["🥤", "💧", "🍊", "⚡", "☕", "🥐", "🥖", "🫓", "🥛", "🍶", "🧀", "🫙", "🥔", "🍫", "🥜", "🚬", "🔥", "🍕", "🍔", "🌮", "🍱", "🥗", "🍰", "🍩", "🍬", "🧃", "🍺", "🫖", "🧴", "🪥", "📦", "🛒"];
-const CASHIERS = ["Иванова А.", "Петров И.", "Сидорова М.", "Козлов Д.", "Новикова Е."];
+const CASHIERS = ["Глазырина С."];
 const TAX_RATE = 0.20;
 
 const fmt = (n: number) =>
@@ -148,9 +148,16 @@ const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => vo
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        //const ok = await posAuth.login(username, password);
-        const ok = true;
-        if (ok) posStore.loadProducts(posAuth.token!);
+        let usernameTmp = username ? username : posAuth.username;
+        let passwordTmp = password ? username : posAuth.password;
+        if (usernameTmp && passwordTmp) {
+            const token = btoa(`${usernameTmp}:${passwordTmp}`);
+        }
+        const ok = await posAuth.login(username, password);
+        if (ok) {
+            posStore.loadProducts();
+            posStore.loadCategories();
+        }
     };
 
     return (
@@ -1054,17 +1061,17 @@ function MarkScanModal({item, onSave, onClose}: MarkScanModalProps) {
 // ─── Add / Edit Product Modal ─────────────────────────────────────────────────
 
 interface ProductModalProps {
-    existingCategories: string[];
+    existingCategories: Category[];
     initial?: Product;
     onSave: (p: Omit<Product, "id">) => void;
     onClose: () => void;
 }
 
 function ProductModal({existingCategories, initial, onSave, onClose}: ProductModalProps) {
-    const allCats = Array.from(new Set([...PRESET_CATEGORIES, ...existingCategories]));
+    const allCats = Array.from(new Set([...existingCategories]));
     const [name, setName] = useState(initial?.name ?? "");
     const [priceStr, setPriceStr] = useState(initial ? String(initial.price) : "");
-    const [category, setCategory] = useState(initial?.category ?? allCats[0]);
+    const [category, setCategory] = useState("Все");
     const [customCat, setCustomCat] = useState("");
     const [useCustomCat, setUseCustomCat] = useState(false);
     const [emoji, setEmoji] = useState(initial?.emoji ?? "📦");
@@ -1092,7 +1099,7 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
         onSave({
             name: name.trim(),
             price: Math.round(parseFloat(priceStr.replace(",", ".")) * 100) / 100,
-            category: useCustomCat ? customCat.trim() : category,
+            category: category,
             emoji,
             barcode: barcode.trim() || String(Date.now()),
             isMarked,
@@ -1180,9 +1187,9 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
                         {!useCustomCat ? (
                             <div className="grid grid-cols-3 gap-2">
                                 {allCats.map(c => (
-                                    <button key={c} onClick={() => setCategory(c)}
-                                            className={`h-9 rounded-lg text-sm font-medium transition-colors truncate px-2 ${category === c ? "bg-primary/15 text-primary border border-primary/30" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
-                                        {c}
+                                    <button key={c.id} onClick={() => setCategory(c.id.toString())}
+                                            className={`h-9 rounded-lg text-sm font-medium transition-colors truncate px-2 ${category === c.id.toString() ? "bg-primary/15 text-primary border border-primary/30" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
+                                        {c.name}
                                     </button>
                                 ))}
                             </div>
@@ -1571,6 +1578,11 @@ export default observer(function App() {
         if (!auth.isConnected && !auth.isLoading) auth.authenticate();
     }, []);
 
+    useEffect(() => {
+        posStore.loadProducts();
+        posStore.loadCategories();
+    }, [posAuth.isAuthenticated]);
+
     // Show history modal when mobile history tab selected
     useEffect(() => {
         if (mobileTab === "history") {
@@ -1579,7 +1591,7 @@ export default observer(function App() {
         }
     }, [mobileTab]);
 
-    const allCategories = ["Все", ...posStore.categories];
+    const allCategories = [...posStore.categories];
     const subtotal = posStore.cartTotal;
     const discountAmt = Math.round(subtotal * discount / 100);
     const total = subtotal - discountAmt;
@@ -1591,7 +1603,7 @@ export default observer(function App() {
     const canPay = posStore.canPay;
 
     const filtered = posStore.products.filter(p =>
-        (category === "Все" || p.category === category) &&
+        (category === "Все" || p.category.toString() === category) &&
         (search === "" || p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search))
     );
 
@@ -1865,10 +1877,14 @@ export default observer(function App() {
                 )}
 
                 <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    <button onClick={() => setCategory("Все")}
+                            className={`shrink-0 px-4 h-8 rounded-lg text-sm font-medium transition-all ${category === "Все" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground border border-border"}`}>
+                        Все
+                    </button>
                     {allCategories.map(c => (
-                        <button key={c} onClick={() => setCategory(c)}
-                                className={`shrink-0 px-4 h-8 rounded-lg text-sm font-medium transition-all ${category === c ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground border border-border"}`}>
-                            {c}
+                        <button key={c.id} onClick={() => setCategory(c.id.toString())}
+                                className={`shrink-0 px-4 h-8 rounded-lg text-sm font-medium transition-all ${category === c.id.toString() ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground border border-border"}`}>
+                            {c.name}
                         </button>
                     ))}
                 </div>
@@ -1894,7 +1910,7 @@ export default observer(function App() {
                                     <button
                                         onClick={e => {
                                             e.stopPropagation();
-                                            posStore.deleteProduct(p.id, posAuth.token);
+                                            posStore.deleteProduct(p.id);
                                         }}
                                         className="w-6 h-6 bg-secondary border border-border rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors">
                                         <Trash className="w-3 h-3"/>
@@ -2184,9 +2200,9 @@ export default observer(function App() {
                     initial={editingProduct ?? undefined}
                     onSave={(p) => {
                         if (editingProduct) {
-                            posStore.updateProduct(editingProduct.id, p, posAuth.token);
+                            posStore.updateProduct(editingProduct.id, p);
                         } else {
-                            posStore.addProduct(p, posAuth.token);
+                            posStore.addProduct(p);
                         }
                         setEditingProduct(null);
                     }}

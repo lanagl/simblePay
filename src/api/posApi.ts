@@ -1,6 +1,6 @@
 // REST API client for the MySQL-backed backend
 
-const DEFAULT_BASE_URL = "https://wfm.utitel.ru/swagger/index.html";
+const DEFAULT_BASE_URL = "https://wfm.utitel.ru/api";
 const STORAGE_KEY = "pos_api_config";
 
 export interface ApiConfig {
@@ -75,7 +75,7 @@ async function request<T>(
         "Content-Type": "application/json",
     };
     if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
+        headers["Authorization"] = `Basic ${token}`;
     }
 
     const url = `${baseUrl}/${path}`;
@@ -109,7 +109,18 @@ async function request<T>(
 export const posApi = {
     /** POST /auth/login → {token, user} */
     login(username: string, password: string): Promise<LoginResponse> {
-        return request<LoginResponse>("POST", "/auth/login", {username, password});
+        const body = {
+            "logic": "And",
+            "conditions": [
+                {
+                    field: "id",
+                    operator: "<",
+                    value: 0
+                }
+            ]
+        }
+        const token = btoa(`${username}:${password}`);
+        return request<LoginResponse>("POST", "Entity/Kassa/data", undefined, token);
     },
 
     /** POST /auth/logout (invalidate token server-side) */
@@ -137,6 +148,21 @@ export const posApi = {
             ]
         }
         return request<ApiProduct[]>("POST", "Entity/Kassa/data", body, token);
+    },
+
+    /** GET /categories */
+    getCategories(token: string): Promise<ApiProduct[]> {
+        const body = {
+            "logic": "And",
+            "conditions": [
+                {
+                    field: "id",
+                    operator: ">",
+                    value: 0
+                }
+            ]
+        }
+        return request<ApiProduct[]>("POST", "Entity/KassaCategory/data", body, token);
     },
 
     /** POST /products */

@@ -11,7 +11,9 @@ export interface PosUser {
 const STORAGE_KEY = "pos_auth";
 
 export class PosAuthStore {
-    token: string | null = "beGMG4Rb41D6hZa1hrrc0dF6R2qvnH+f5pfr08hXYKOJwwMiKgHTRgIoXZS8fiZwY+DejPuCcj/jyZ9+Uoir7Q==";
+    token: string | null = null;
+    username: string | null = null;
+    password: string | null = null;
     user: PosUser | null = null;
     isLoading = false;
     error: string | null = null;
@@ -56,8 +58,9 @@ export class PosAuthStore {
         try {
             const res = await posApi.login(username, password);
             runInAction(() => {
-                this.token = res.token;
-                this.user = res.user;
+                this.username = username;
+                this.password = password;
+                this.token = btoa(`${username}:${password}`);
                 this.isLoading = false;
             });
             this.persist();
