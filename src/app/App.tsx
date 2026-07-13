@@ -2,19 +2,26 @@ import React, {useCallback, useEffect, useRef, useState} from "react";
 import {observer} from "mobx-react-lite";
 import {
     AlertTriangle,
+    ArrowDownRight,
+    ArrowUpRight,
     Banknote,
     BarChart3,
     Building2,
+    CalendarDays,
     CheckCheck,
     CheckCircle2,
     CheckSquare,
     ChevronDown,
+    ChevronLeft,
     ChevronRight,
     Clock,
     CreditCard,
     Database,
+    ExternalLink,
     Eye,
     EyeOff,
+    FileText,
+    History,
     Info,
     KeyRound,
     LayoutGrid,
@@ -24,6 +31,7 @@ import {
     LogIn,
     LogOut,
     Minus,
+    Monitor,
     PackagePlus,
     Pencil,
     Plus,
@@ -48,6 +56,8 @@ import {
 } from "lucide-react";
 import {useStore} from "../stores/rootStore";
 import type {CartItem, PaymentMethod, Product} from "../stores/posStore";
+import type {ReceiptDetail, ReceiptShort} from "../api/ofdApi";
+import {TAXATION_LABELS} from "../api/ofdApi";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -59,6 +69,8 @@ const TAX_RATE = 0.20;
 const fmt = (n: number) =>
     n.toLocaleString("ru-RU", {style: "currency", currency: "RUB", minimumFractionDigits: 2});
 
+const fmtKop = (kopecks: number) => fmt(kopecks / 100);
+
 const nowStr = () =>
     new Date().toLocaleString("ru-RU", {
         day: "2-digit",
@@ -68,13 +80,40 @@ const nowStr = () =>
         minute: "2-digit"
     });
 
+const fmtDt = (iso: string) => {
+    try {
+        return new Date(iso).toLocaleString("ru-RU", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
+    } catch {
+        return iso;
+    }
+};
+
+const fmtDate = (iso: string) => {
+    try {
+        return new Date(iso).toLocaleDateString("ru-RU", {day: "2-digit", month: "2-digit", year: "numeric"});
+    } catch {
+        return iso;
+    }
+};
+
+const isoLocal = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 const genDemoCode = (barcode: string) => {
     const rnd = Math.random().toString(36).slice(2, 12).toUpperCase();
     return `010${barcode}21${rnd}`;
 };
 
 type AppView = "pos" | "payment" | "receipt";
-type MobileTab = "catalog" | "cart";
+type MobileTab = "catalog" | "cart" | "history";
 
 // ─── NumPad ───────────────────────────────────────────────────────────────────
 
@@ -109,16 +148,14 @@ const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => vo
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        const ok = await posAuth.login(username, password);
-        if (ok) {
-            posStore.loadProducts(posAuth.token!);
-        }
+        //const ok = await posAuth.login(username, password);
+        const ok = true;
+        if (ok) posStore.loadProducts(posAuth.token!);
     };
 
     return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-sm">
-                {/* Logo */}
                 <div className="text-center mb-8">
                     <div
                         className="w-20 h-20 bg-primary rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-primary/20">
@@ -128,7 +165,6 @@ const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => vo
                     <p className="text-muted-foreground text-sm mt-2">Система кассового обслуживания</p>
                 </div>
 
-                {/* Card */}
                 <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
                     <div className="px-6 py-5 border-b border-border">
                         <div className="flex items-center gap-2">
@@ -138,7 +174,6 @@ const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => vo
                     </div>
 
                     <form onSubmit={handleLogin} className="p-6 space-y-4">
-                        {/* Error */}
                         {posAuth.error && (
                             <div
                                 className="flex items-center gap-2 bg-destructive/8 border border-destructive/20 rounded-xl px-4 py-3 text-sm text-destructive">
@@ -146,55 +181,35 @@ const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => vo
                                 {posAuth.error}
                             </div>
                         )}
-
-                        {/* Username */}
                         <div>
-                            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                                Логин
-                            </label>
+                            <label
+                                className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Логин</label>
                             <div className="relative">
                                 <User
                                     className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/>
-                                <input
-                                    value={username}
-                                    onChange={e => setUsername(e.target.value)}
-                                    placeholder="Введите логин"
-                                    autoComplete="username"
-                                    required
-                                    className="w-full h-11 bg-secondary border border-border rounded-xl pl-10 pr-4 text-sm focus:outline-none focus:border-primary/60 transition-colors"
-                                />
+                                <input value={username} onChange={e => setUsername(e.target.value)}
+                                       placeholder="Введите логин" autoComplete="username" required
+                                       className="w-full h-11 bg-secondary border border-border rounded-xl pl-10 pr-4 text-sm focus:outline-none focus:border-primary/60 transition-colors"/>
                             </div>
                         </div>
-
-                        {/* Password */}
                         <div>
-                            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                                Пароль
-                            </label>
+                            <label
+                                className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Пароль</label>
                             <div className="relative">
                                 <Lock
                                     className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/>
-                                <input
-                                    type={showPass ? "text" : "password"}
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    placeholder="Введите пароль"
-                                    autoComplete="current-password"
-                                    required
-                                    className="w-full h-11 bg-secondary border border-border rounded-xl pl-10 pr-11 text-sm focus:outline-none focus:border-primary/60 transition-colors"
-                                />
+                                <input type={showPass ? "text" : "password"} value={password}
+                                       onChange={e => setPassword(e.target.value)} placeholder="Введите пароль"
+                                       autoComplete="current-password" required
+                                       className="w-full h-11 bg-secondary border border-border rounded-xl pl-10 pr-11 text-sm focus:outline-none focus:border-primary/60 transition-colors"/>
                                 <button type="button" onClick={() => setShowPass(v => !v)}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                                     {showPass ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
                                 </button>
                             </div>
                         </div>
-
-                        {/* Submit */}
-                        <button
-                            type="submit"
-                            disabled={posAuth.isLoading || !username || !password}
-                            className="w-full h-12 mt-2 bg-primary text-primary-foreground rounded-xl font-bold text-base hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        <button type="submit" disabled={posAuth.isLoading || !username || !password}
+                                className="w-full h-12 mt-2 bg-primary text-primary-foreground rounded-xl font-bold text-base hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                             {posAuth.isLoading
                                 ? <><Loader2 className="w-5 h-5 animate-spin"/>Вход...</>
                                 : <><LogIn className="w-5 h-5"/>Войти</>}
@@ -202,17 +217,13 @@ const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => vo
                     </form>
                 </div>
 
-                {/* API settings link */}
-                <button
-                    onClick={onShowApiSettings}
-                    className="w-full mt-4 flex items-center justify-center gap-2 text-muted-foreground text-sm hover:text-foreground transition-colors py-2">
+                <button onClick={onShowApiSettings}
+                        className="w-full mt-4 flex items-center justify-center gap-2 text-muted-foreground text-sm hover:text-foreground transition-colors py-2">
                     <Server className="w-4 h-4"/>
                     Настройки подключения к серверу
                 </button>
-
-                <p className="text-center text-muted-foreground text-xs mt-6 font-mono">
-                    ООО «РОМАШКА» · ИНН 7701234567
-                </p>
+                <p className="text-center text-muted-foreground text-xs mt-6 font-mono">ООО «РОМАШКА» · ИНН
+                    7701234567</p>
             </div>
         </div>
     );
@@ -241,11 +252,6 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
         }
     };
 
-    const handleSave = () => {
-        posAuth.setApiBaseUrl(url);
-        onClose();
-    };
-
     return (
         <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
@@ -267,15 +273,12 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
                             className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                             <Database className="w-3.5 h-3.5"/>Адрес API
                         </label>
-                        <input
-                            value={url}
-                            onChange={e => {
-                                setUrl(e.target.value);
-                                setTestResult("idle");
-                            }}
-                            placeholder="http://localhost:3000/api"
-                            className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"
-                        />
+                        <input value={url} onChange={e => {
+                            setUrl(e.target.value);
+                            setTestResult("idle");
+                        }}
+                               placeholder="https://wfm.utitel.ru/swagger/index.html#"
+                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
                     </div>
 
                     {testResult !== "idle" && (
@@ -284,20 +287,16 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
                                 : testResult === "ok" ? "bg-primary/5 border-primary/20 text-primary"
                                     : "bg-destructive/5 border-destructive/20 text-destructive"
                         }`}>
-                            {testResult === "testing"
-                                ? <Loader2 className="w-4 h-4 animate-spin shrink-0"/>
-                                : testResult === "ok"
-                                    ? <CheckCircle2 className="w-4 h-4 shrink-0"/>
+                            {testResult === "testing" ? <Loader2 className="w-4 h-4 animate-spin shrink-0"/>
+                                : testResult === "ok" ? <CheckCircle2 className="w-4 h-4 shrink-0"/>
                                     : <AlertTriangle className="w-4 h-4 shrink-0"/>}
                             {testMsg || "Проверка..."}
                         </div>
                     )}
 
-                    {/* MySQL schema hint */}
                     <div className="bg-muted rounded-xl p-4 space-y-2">
                         <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                            <Database className="w-3.5 h-3.5 text-muted-foreground"/>
-                            Ожидаемая схема MySQL
+                            <Database className="w-3.5 h-3.5 text-muted-foreground"/>Ожидаемая схема MySQL
                         </p>
                         <pre
                             className="text-[11px] text-muted-foreground leading-relaxed overflow-x-auto">{`CREATE TABLE products
@@ -309,26 +308,15 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
                                                                                                                 category  VARCHAR(100)   NOT NULL,
                                                                                                                 barcode   VARCHAR(50),
                                                                                                                 is_marked TINYINT(1) DEFAULT 0
-                                                                                                            );
-
-                        CREATE TABLE users
-                        (
-                            id       INT AUTO_INCREMENT PRIMARY KEY,
-                            name     VARCHAR(255)        NOT NULL,
-                            username VARCHAR(100) UNIQUE NOT NULL,
-                            password VARCHAR(255)        NOT NULL, -- bcrypt
-                            role     ENUM('cashier','manager','admin')
-                        );`}</pre>
+                                                                                                            );`}</pre>
                     </div>
 
                     <div className="bg-muted rounded-xl p-3 flex gap-2">
                         <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5"/>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                            Бэкенд должен принимать <span className="font-mono">Bearer</span> токен в заголовке <span
-                            className="font-mono">Authorization</span>.
+                            Бэкенд принимает <span className="font-mono">Bearer</span> токен.
                             Эндпоинты: <span className="font-mono">POST /auth/login</span>, <span className="font-mono">GET /products</span>, <span
-                            className="font-mono">POST /products</span>, <span
-                            className="font-mono">PUT /products/:id</span>, <span className="font-mono">DELETE /products/:id</span>.
+                            className="font-mono">POST|PUT|DELETE /products/:id</span>.
                         </p>
                     </div>
                 </div>
@@ -337,6 +325,156 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
                     <button onClick={handleTest} disabled={testResult === "testing"}
                             className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                         {testResult === "testing" ? <Loader2 className="w-4 h-4 animate-spin"/> :
+                            <RefreshCw className="w-4 h-4"/>}
+                        Проверить
+                    </button>
+                    <button onClick={() => {
+                        posAuth.setApiBaseUrl(url);
+                        onClose();
+                    }}
+                            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                        <CheckSquare className="w-4 h-4"/>Сохранить
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+// ─── OFD Integration Settings Modal (v1.71 API) ───────────────────────────────
+
+const OfdSettingsModal = observer(({onClose}: { onClose: () => void }) => {
+    const {ofdStore} = useStore();
+    const [authToken, setAuthToken] = useState(ofdStore.config.authToken);
+    const [inn, setInn] = useState(ofdStore.config.inn);
+    const [baseUrl, setBaseUrl] = useState(ofdStore.config.baseUrl);
+    const [showToken, setShowToken] = useState(false);
+
+    const handleSave = async () => {
+        ofdStore.setConfig({authToken: authToken.trim(), inn: inn.trim(), baseUrl: baseUrl.trim()});
+        onClose();
+    };
+
+    const handleTest = async () => {
+        ofdStore.setConfig({authToken: authToken.trim(), inn: inn.trim(), baseUrl: baseUrl.trim()});
+        await ofdStore.testConnection();
+    };
+
+    const statusColor = ofdStore.isConnected ? "text-primary" : ofdStore.isConnecting ? "text-accent" : "text-destructive";
+    const statusText = ofdStore.isConnected
+        ? `Подключено · ${ofdStore.kktList.length} ККТ`
+        : ofdStore.isConnecting ? "Проверка соединения..."
+            : ofdStore.connectionError ?? "Не подключено";
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+            <div
+                className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[95vh] flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+                    <div className="flex items-center gap-2">
+                        <Settings className="w-5 h-5 text-primary"/>
+                        <div>
+                            <h2 className="font-bold text-foreground leading-none">Настройки OFD.ru</h2>
+                            <p className="text-muted-foreground text-xs mt-0.5">Integration API v1.71</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                    {/* Connection status */}
+                    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 border ${
+                        ofdStore.isConnected ? "bg-primary/5 border-primary/20" : "bg-muted border-border"
+                    }`}>
+                        {ofdStore.isConnecting
+                            ? <Loader2 className="w-4 h-4 text-accent animate-spin shrink-0"/>
+                            : ofdStore.isConnected
+                                ? <Wifi className="w-4 h-4 text-primary shrink-0"/>
+                                : <WifiOff className="w-4 h-4 text-muted-foreground shrink-0"/>}
+                        <span className={`text-sm font-medium ${statusColor}`}>{statusText}</span>
+                    </div>
+
+                    {/* API Token */}
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <KeyRound className="w-3.5 h-3.5"/>API-ключ
+                        </label>
+                        <div className="relative">
+                            <input type={showToken ? "text" : "password"} value={authToken}
+                                   onChange={e => setAuthToken(e.target.value)}
+                                   placeholder="Ключ из lk.ofd.ru → Настройки → Передача данных → API"
+                                   className="w-full h-11 bg-secondary border border-border rounded-xl px-3 pr-11 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                            <button type="button" onClick={() => setShowToken(v => !v)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                                {showToken ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* INN */}
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5"/>ИНН организации
+                        </label>
+                        <input value={inn} onChange={e => setInn(e.target.value)} inputMode="numeric" maxLength={12}
+                               placeholder="000000000000"
+                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                    </div>
+
+                    {/* Base URL */}
+                    <div>
+                        <label
+                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <Server className="w-3.5 h-3.5"/>Base URL
+                        </label>
+                        <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)}
+                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                        <button onClick={() => setBaseUrl("https://lk-demo.ofd.ru/api/integration/v2")}
+                                className="mt-1.5 text-xs text-primary hover:underline">Использовать demo-стенд
+                        </button>
+                    </div>
+
+                    {/* KKT list if connected */}
+                    {ofdStore.kktList.length > 0 && (
+                        <div className="bg-muted rounded-xl overflow-hidden">
+                            <p className="text-xs font-semibold text-foreground px-4 pt-3 pb-2 flex items-center gap-1.5">
+                                <Monitor className="w-3.5 h-3.5 text-muted-foreground"/>ККТ в аккаунте
+                            </p>
+                            <div className="divide-y divide-border">
+                                {ofdStore.kktList.map(kkt => (
+                                    <div key={kkt.Id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{kkt.KktModel}</p>
+                                            <p className="text-xs font-mono text-muted-foreground">РН {kkt.RnmNumber}</p>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className="text-xs text-muted-foreground">ФН до</p>
+                                            <p className="text-xs font-mono text-foreground">{fmtDate(kkt.FnEndDate)}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-muted rounded-xl p-3 flex gap-2">
+                        <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5"/>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                            API-ключ получите в личном кабинете <span className="font-mono">lk.ofd.ru</span> →
+                            Настройки → Передача данных → API-интеграция.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
+                    <button onClick={handleTest} disabled={ofdStore.isConnecting || !authToken || !inn}
+                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                        {ofdStore.isConnecting ? <Loader2 className="w-4 h-4 animate-spin"/> :
                             <RefreshCw className="w-4 h-4"/>}
                         Проверить
                     </button>
@@ -350,94 +488,433 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
     );
 });
 
-// ─── OFD Settings Modal ───────────────────────────────────────────────────────
+// ─── OFD History Modal ────────────────────────────────────────────────────────
 
-const OfdSettingsModal = observer(({onClose}: { onClose: () => void }) => {
-    const {auth} = useStore();
-    const [login, setLogin] = useState(auth.login);
-    const [password, setPassword] = useState(auth.password);
-    const [inn, setInn] = useState(auth.inn);
+type HistoryTab = "receipts" | "zreports" | "kkts";
 
-    const handleSave = async () => {
-        auth.setCredentials(login, password, inn);
-        await auth.authenticate();
-        onClose();
+const HistoryModal = observer(({onClose}: { onClose: () => void }) => {
+    const {ofdStore} = useStore();
+    const [tab, setTab] = useState<HistoryTab>("receipts");
+    const [dateFrom, setDateFrom] = useState(isoLocal((() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        return d;
+    })()));
+    const [dateTo, setDateTo] = useState(isoLocal(new Date()));
+    const [selectedDetail, setSelectedDetail] = useState<ReceiptDetail | null>(null);
+
+    const tabs: { id: HistoryTab; label: string; icon: React.ReactNode }[] = [
+        {id: "receipts", label: "Чеки", icon: <Receipt className="w-4 h-4"/>},
+        {id: "zreports", label: "Z-отчёты", icon: <BarChart3 className="w-4 h-4"/>},
+        {id: "kkts", label: "ККТ", icon: <Monitor className="w-4 h-4"/>},
+    ];
+
+    const handleLoad = () => {
+        const from = dateFrom + "T00:00:00";
+        const to = dateTo + "T23:59:59";
+        ofdStore.setDateRange(from, to);
+        if (tab === "receipts") ofdStore.loadReceipts();
+        else if (tab === "zreports") ofdStore.loadZReports();
+        else ofdStore.loadKktInfo();
     };
 
-    const statusColor = auth.isConnected ? "text-primary" : auth.isLoading ? "text-accent" : "text-destructive";
-    const statusText = auth.isConnected
-        ? `Подключено · до ${auth.tokenExpiresAt ? new Date(auth.tokenExpiresAt).toLocaleTimeString("ru-RU", {
-            hour: "2-digit",
-            minute: "2-digit"
-        }) : "—"}`
-        : auth.isLoading ? "Подключение..." : auth.error ?? "Не подключено";
+    useEffect(() => {
+        if (!ofdStore.isConnected && ofdStore.configValid) ofdStore.testConnection();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    return (
-        <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
-            <div
-                className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[95vh] flex flex-col">
+    const handleReceiptClick = async (r: ReceiptShort) => {
+        if (!ofdStore.selectedKktRnm) return;
+        await ofdStore.loadReceiptDetail(ofdStore.selectedKktRnm, r.Id);
+        const detail = ofdStore.receiptDetail;
+        if (detail) setSelectedDetail(detail);
+    };
+
+    const opLabel = (op: string) => {
+        const map: Record<string, string> = {
+            income: "Приход",
+            incomeReturn: "Возврат прихода",
+            outcome: "Расход",
+            outcomeReturn: "Возврат расхода",
+        };
+        return map[op] ?? op;
+    };
+
+    const opIcon = (op: string) =>
+        op === "income" ? <ArrowUpRight className="w-3.5 h-3.5 text-primary"/>
+            : op === "incomeReturn" ? <ArrowDownRight className="w-3.5 h-3.5 text-destructive"/>
+                : <ArrowDownRight className="w-3.5 h-3.5 text-muted-foreground"/>;
+
+    // If detail is shown
+    if (selectedDetail) {
+        return (
+            <div className="fixed inset-0 z-50 flex flex-col bg-card">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-                    <div className="flex items-center gap-2">
-                        <Settings className="w-5 h-5 text-primary"/>
-                        <h2 className="font-bold text-foreground">Настройки ОФД Ferma®</h2>
+                    <button onClick={() => setSelectedDetail(null)}
+                            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                        <ChevronLeft className="w-5 h-5"/>
+                        <span className="text-sm font-medium">Назад</span>
+                    </button>
+                    <div className="text-center">
+                        <p className="font-bold text-foreground text-sm">{opLabel(selectedDetail.OperationType)}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{fmtDt(selectedDetail.CDateUtc)}</p>
                     </div>
                     <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
                         <X className="w-5 h-5"/>
                     </button>
                 </div>
-                <div className="overflow-y-auto flex-1 p-5 space-y-4">
-                    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 border ${
-                        auth.isConnected ? "bg-primary/5 border-primary/20" : "bg-muted border-border"
-                    }`}>
-                        {auth.isLoading
-                            ? <Loader2 className="w-4 h-4 text-accent animate-spin shrink-0"/>
-                            : auth.isConnected
-                                ? <Wifi className="w-4 h-4 text-primary shrink-0"/>
-                                : <WifiOff className="w-4 h-4 text-destructive shrink-0"/>}
-                        <span className={`text-sm font-medium ${statusColor}`}>{statusText}</span>
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                    {/* Summary */}
+                    <div className="grid grid-cols-2 gap-3">
+                        {[
+                            {label: "Итого", val: fmtKop(selectedDetail.Amount_Total), big: true},
+                            {
+                                label: "Система налог.",
+                                val: TAXATION_LABELS[selectedDetail.TaxationType as keyof typeof TAXATION_LABELS] ?? String(selectedDetail.TaxationType)
+                            },
+                            {label: "Наличные", val: fmtKop(selectedDetail.Amount_Cash)},
+                            {label: "Безналичные", val: fmtKop(selectedDetail.Amount_ECash)},
+                            {label: "ФП", val: selectedDetail.FiscalSign, mono: true},
+                            {label: "Кассир", val: selectedDetail.Operator ?? "—"},
+                        ].map(({label, val, big, mono}) => (
+                            <div key={label} className="bg-secondary rounded-xl p-3">
+                                <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                                <p className={`font-semibold text-foreground truncate ${big ? "text-primary text-lg font-mono" : mono ? "font-mono text-sm" : "text-sm"}`}>{val}</p>
+                            </div>
+                        ))}
                     </div>
-                    <div>
-                        <label
-                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                            <KeyRound className="w-3.5 h-3.5"/>Логин
-                        </label>
-                        <input value={login} onChange={e => setLogin(e.target.value)}
-                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+
+                    {/* Items */}
+                    <div className="bg-secondary rounded-xl overflow-hidden">
+                        <p className="text-xs font-semibold text-foreground px-4 pt-3 pb-2 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-muted-foreground"/>Позиции
+                            ({selectedDetail.Items.length})
+                        </p>
+                        <div className="divide-y divide-border">
+                            {selectedDetail.Items.map((item, i) => (
+                                <div key={i} className="px-4 py-2.5">
+                                    <div className="flex justify-between items-start gap-2">
+                                        <p className="text-sm font-medium text-foreground flex-1 min-w-0">{item.Name}</p>
+                                        <p className="text-sm font-mono font-bold text-foreground shrink-0">{fmtKop(item.Total)}</p>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                                        {fmtKop(item.Price)} × {item.Quantity}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
+
+                    {/* View on OFD.ru */}
+                    {selectedDetail.FnNumber && selectedDetail.DocNumber && (
+                        <a href={`https://ofd.ru/rec/${ofdStore.config.inn}/${ofdStore.selectedKktRnm}/${selectedDetail.FnNumber}/${selectedDetail.DocNumber}/${selectedDetail.FiscalSign}`}
+                           target="_blank" rel="noopener noreferrer"
+                           className="flex items-center justify-center gap-2 w-full h-12 bg-secondary border border-border rounded-xl text-sm font-semibold text-foreground hover:bg-muted transition-colors">
+                            <ExternalLink className="w-4 h-4"/>Открыть на OFD.ru
+                        </a>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex flex-col bg-card">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+                <div className="flex items-center gap-2">
+                    <History className="w-5 h-5 text-primary"/>
                     <div>
-                        <label
-                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                            <Lock className="w-3.5 h-3.5"/>Пароль
-                        </label>
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
-                    </div>
-                    <div>
-                        <label
-                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5"/>ИНН организации
-                        </label>
-                        <input value={inn} onChange={e => setInn(e.target.value)} inputMode="numeric" maxLength={12}
-                               placeholder="000000000000"
-                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                        <h2 className="font-bold text-foreground leading-none">История ОФД</h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">OFD.ru Integration v1.71</p>
                     </div>
                 </div>
-                <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
-                    <button onClick={() => {
-                        auth.setCredentials(login, password, inn);
-                        auth.authenticate();
-                    }} disabled={auth.isLoading}
-                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-                        {auth.isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> :
-                            <RefreshCw className="w-4 h-4"/>}
-                        Проверить
-                    </button>
-                    <button onClick={handleSave} disabled={auth.isLoading}
-                            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50">
-                        <CheckSquare className="w-4 h-4"/>Сохранить
+                <div className="flex items-center gap-2">
+                    {!ofdStore.isConnected && (
+                        <button onClick={() => ofdStore.testConnection()}
+                                disabled={ofdStore.isConnecting || !ofdStore.configValid}
+                                className="flex items-center gap-1.5 h-8 px-3 bg-secondary border border-border rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+                            {ofdStore.isConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> :
+                                <Wifi className="w-3.5 h-3.5"/>}
+                            Подключить
+                        </button>
+                    )}
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-5 h-5"/>
                     </button>
                 </div>
+            </div>
+
+            {/* Not connected banner */}
+            {!ofdStore.isConnected && !ofdStore.isConnecting && (
+                <div
+                    className="mx-5 mt-4 bg-muted border border-border rounded-xl px-4 py-3 flex items-center gap-3 shrink-0">
+                    <WifiOff className="w-5 h-5 text-muted-foreground shrink-0"/>
+                    <div>
+                        <p className="text-sm font-medium text-foreground">OFD.ru не подключён</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            {ofdStore.connectionError ?? "Настройте API-ключ и ИНН в настройках ОФД"}
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Tabs */}
+            <div className="flex gap-1 px-5 pt-4 shrink-0">
+                {tabs.map(t => (
+                    <button key={t.id} onClick={() => setTab(t.id)}
+                            className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground border border-border hover:text-foreground"}`}>
+                        {t.icon}{t.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* KKT selector */}
+            {ofdStore.kktList.length > 1 && (
+                <div className="px-5 pt-3 shrink-0">
+                    <select
+                        value={ofdStore.selectedKktRnm ?? ""}
+                        onChange={e => {
+                            // @ts-ignore
+                            ofdStore.selectedKktRnm = e.target.value;
+                        }}
+                        className="w-full h-10 bg-secondary border border-border rounded-xl px-3 text-sm focus:outline-none focus:border-primary/60">
+                        {ofdStore.kktList.map(k => (
+                            <option key={k.Id} value={k.RnmNumber}>{k.KktModel} — РН {k.RnmNumber}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
+            {/* Date range + load button */}
+            {(tab === "receipts" || tab === "zreports") && (
+                <div className="px-5 pt-3 flex gap-2 items-center shrink-0">
+                    <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0"/>
+                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                           className="flex-1 h-10 bg-secondary border border-border rounded-xl px-3 text-sm focus:outline-none focus:border-primary/60"/>
+                    <span className="text-muted-foreground text-sm">—</span>
+                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                           className="flex-1 h-10 bg-secondary border border-border rounded-xl px-3 text-sm focus:outline-none focus:border-primary/60"/>
+                    <button onClick={handleLoad} disabled={!ofdStore.isConnected}
+                            className="h-10 px-4 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-1.5 shrink-0">
+                        {(ofdStore.isLoadingReceipts || ofdStore.isLoadingZReports)
+                            ? <Loader2 className="w-4 h-4 animate-spin"/>
+                            : <RefreshCw className="w-4 h-4"/>}
+                        <span className="hidden sm:inline">Загрузить</span>
+                    </button>
+                </div>
+            )}
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+
+                {/* ── Receipts tab ── */}
+                {tab === "receipts" && (
+                    <>
+                        {ofdStore.receiptsError && (
+                            <div
+                                className="flex items-center gap-2 bg-destructive/5 border border-destructive/20 rounded-xl px-4 py-3 text-sm text-destructive mb-4">
+                                <AlertTriangle className="w-4 h-4 shrink-0"/>{ofdStore.receiptsError}
+                            </div>
+                        )}
+
+                        {ofdStore.receipts.length > 0 && (
+                            <div className="mb-4 grid grid-cols-3 gap-3">
+                                {[
+                                    {label: "Чеков", val: String(ofdStore.receipts.length)},
+                                    {label: "Приходов", val: String(ofdStore.incomeReceipts.length), primary: true},
+                                    {label: "Возвратов", val: String(ofdStore.returnReceipts.length)},
+                                ].map(({label, val, primary}) => (
+                                    <div key={label} className="bg-secondary rounded-xl p-3 text-center">
+                                        <p className="text-xs text-muted-foreground">{label}</p>
+                                        <p className={`text-lg font-mono font-bold mt-0.5 ${primary ? "text-primary" : "text-foreground"}`}>{val}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {ofdStore.isLoadingReceipts ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                                <Loader2 className="w-8 h-8 animate-spin mb-3"/>
+                                <p className="text-sm">Загрузка чеков...</p>
+                            </div>
+                        ) : ofdStore.receipts.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                                <Receipt className="w-12 h-12 mb-3 opacity-20"/>
+                                <p className="text-sm">Выберите период и нажмите «Загрузить»</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {ofdStore.receipts.map(r => (
+                                    <button key={r.Id} onClick={() => handleReceiptClick(r)}
+                                            className="w-full flex items-center gap-3 bg-secondary hover:bg-muted border border-border hover:border-primary/30 rounded-xl px-4 py-3 transition-colors text-left group">
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                            r.OperationType === "income" ? "bg-primary/10" : "bg-destructive/10"
+                                        }`}>
+                                            {opIcon(r.OperationType)}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm font-medium text-foreground">{opLabel(r.OperationType)}</p>
+                                                {r.FnsStatus === "Failed" && (
+                                                    <span
+                                                        className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded font-medium">ФНС: ошибка</span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground font-mono mt-0.5">{fmtDt(r.CDateUtc)}</p>
+                                            {r.Operator &&
+												<p className="text-xs text-muted-foreground mt-0.5 truncate">{r.Operator}</p>}
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className={`font-mono font-bold text-sm ${r.OperationType === "income" ? "text-primary" : "text-destructive"}`}>
+                                                {r.OperationType === "income" ? "+" : "−"}{fmtKop(r.TotalSumm)}
+                                            </p>
+                                            {r.CashSumm > 0 &&
+												<p className="text-xs text-muted-foreground font-mono">Нал {fmtKop(r.CashSumm)}</p>}
+                                            {r.ECashSumm > 0 &&
+												<p className="text-xs text-muted-foreground font-mono">Безнал {fmtKop(r.ECashSumm)}</p>}
+                                        </div>
+                                        <ChevronRight
+                                            className="w-4 h-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"/>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* ── Z-Reports tab ── */}
+                {tab === "zreports" && (
+                    <>
+                        {ofdStore.zReportsError && (
+                            <div
+                                className="flex items-center gap-2 bg-destructive/5 border border-destructive/20 rounded-xl px-4 py-3 text-sm text-destructive mb-4">
+                                <AlertTriangle className="w-4 h-4 shrink-0"/>{ofdStore.zReportsError}
+                            </div>
+                        )}
+
+                        {ofdStore.isLoadingZReports ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                                <Loader2 className="w-8 h-8 animate-spin mb-3"/>
+                                <p className="text-sm">Загрузка Z-отчётов...</p>
+                            </div>
+                        ) : ofdStore.zReports.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                                <BarChart3 className="w-12 h-12 mb-3 opacity-20"/>
+                                <p className="text-sm">Выберите период и нажмите «Загрузить»</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {ofdStore.zReports.map(z => (
+                                    <div key={z.Id}
+                                         className="bg-secondary border border-border rounded-xl overflow-hidden">
+                                        <div
+                                            className="px-4 py-3 border-b border-border flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <BarChart3 className="w-4 h-4 text-muted-foreground"/>
+                                                <span
+                                                    className="font-semibold text-foreground">Смена №{z.ShiftNumber}</span>
+                                            </div>
+                                            <span
+                                                className="text-xs text-muted-foreground font-mono">{fmtDate(z.Open_DocDateTime)}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 divide-x divide-border">
+                                            <div className="px-4 py-3">
+                                                <p className="text-xs text-muted-foreground">Приход</p>
+                                                <p className="font-mono font-bold text-primary">{fmtKop(z.IncomeSumm)}</p>
+                                            </div>
+                                            <div className="px-4 py-3">
+                                                <p className="text-xs text-muted-foreground">Возврат</p>
+                                                <p className="font-mono font-bold text-destructive">{fmtKop(z.RefundIncomeSumm)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="px-4 pb-3 text-xs text-muted-foreground flex gap-4">
+                                            <span className="font-mono">Открыта: {fmtDt(z.Open_DocDateTime)}</span>
+                                            {z.Close_DocDateTime && <span
+												className="font-mono">Закрыта: {fmtDt(z.Close_DocDateTime)}</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* ── KKT monitoring tab ── */}
+                {tab === "kkts" && (
+                    <>
+                        <button onClick={() => ofdStore.loadKktInfo()}
+                                disabled={!ofdStore.isConnected || ofdStore.isLoadingKkts}
+                                className="flex items-center gap-2 h-10 px-4 mb-4 bg-secondary border border-border rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+                            {ofdStore.isLoadingKkts ? <Loader2 className="w-4 h-4 animate-spin"/> :
+                                <RefreshCw className="w-4 h-4"/>}
+                            Обновить список ККТ
+                        </button>
+
+                        {ofdStore.isLoadingKkts ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                                <Loader2 className="w-8 h-8 animate-spin mb-3"/>
+                                <p className="text-sm">Загрузка данных ККТ...</p>
+                            </div>
+                        ) : ofdStore.kktInfo.length === 0 && ofdStore.kktList.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                                <Monitor className="w-12 h-12 mb-3 opacity-20"/>
+                                <p className="text-sm">Нет данных о ККТ</p>
+                                <p className="text-xs mt-1">Нажмите «Обновить» или подключитесь к OFD.ru</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {(ofdStore.kktInfo.length > 0 ? ofdStore.kktInfo : ofdStore.kktList).map((k: any) => {
+                                    const fnEndDate = k.FnEndDate ? new Date(k.FnEndDate) : null;
+                                    const fnDaysLeft = fnEndDate ? Math.ceil((fnEndDate.getTime() - Date.now()) / 86400000) : null;
+                                    const fnWarning = fnDaysLeft !== null && fnDaysLeft < 30;
+                                    return (
+                                        <div key={k.Id}
+                                             className="bg-secondary border border-border rounded-xl overflow-hidden">
+                                            <div
+                                                className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <Monitor className="w-4 h-4 text-muted-foreground shrink-0"/>
+                                                    <p className="font-semibold text-foreground truncate">{k.KktModel}</p>
+                                                </div>
+                                                {fnWarning && (
+                                                    <span
+                                                        className="text-[10px] bg-accent/10 text-accent px-2 py-0.5 rounded font-semibold shrink-0">
+                            ФН: {fnDaysLeft}д
+                          </span>
+                                                )}
+                                            </div>
+                                            <div className="px-4 py-3 space-y-2">
+                                                {[
+                                                    {label: "РНМ", val: k.RnmNumber ?? k.KktRegId},
+                                                    {label: "Серийный №", val: k.SerialNumber},
+                                                    {label: "ФН №", val: k.FnNumber},
+                                                    {label: "Адрес", val: k.Address},
+                                                    {
+                                                        label: "ФН до",
+                                                        val: fnEndDate ? fmtDate(k.FnEndDate) : undefined,
+                                                        warn: fnWarning
+                                                    },
+                                                    {
+                                                        label: "Договор до",
+                                                        val: k.ContractEndDate ? fmtDate(k.ContractEndDate) : undefined
+                                                    },
+                                                ].filter(row => row.val).map(({label, val, warn}) => (
+                                                    <div key={label} className="flex justify-between gap-3">
+                                                        <span
+                                                            className="text-xs text-muted-foreground shrink-0">{label}</span>
+                                                        <span
+                                                            className={`text-xs font-mono text-right truncate ${warn ? "text-accent font-semibold" : "text-foreground"}`}>{val}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
         </div>
     );
@@ -639,7 +1116,6 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
                     </button>
                 </div>
                 <div className="overflow-y-auto flex-1 p-5 space-y-4">
-                    {/* Emoji */}
                     <div>
                         <label
                             className="text-xs text-muted-foreground uppercase tracking-wide mb-2 block">Иконка</label>
@@ -666,7 +1142,6 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
                             </div>
                         )}
                     </div>
-                    {/* Name */}
                     <div>
                         <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Название
                             *</label>
@@ -678,7 +1153,6 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
                                className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm focus:outline-none transition-colors ${errors.name ? "border-destructive" : "border-border focus:border-primary/60"}`}/>
                         {errors.name && <p className="text-destructive text-xs mt-1">{errors.name}</p>}
                     </div>
-                    {/* Price */}
                     <div>
                         <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Цена, ₽
                             *</label>
@@ -690,7 +1164,6 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
                                className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm font-mono focus:outline-none transition-colors ${errors.price ? "border-destructive" : "border-border focus:border-primary/60"}`}/>
                         {errors.price && <p className="text-destructive text-xs mt-1">{errors.price}</p>}
                     </div>
-                    {/* Category */}
                     <div>
                         <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Категория
                             *</label>
@@ -725,7 +1198,6 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
                             </>
                         )}
                     </div>
-                    {/* Barcode */}
                     <div>
                         <label
                             className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Штрихкод</label>
@@ -733,7 +1205,6 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
                                placeholder="Введите или отсканируйте"
                                className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
                     </div>
-                    {/* Marking */}
                     <div>
                         <label
                             className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Маркировка</label>
@@ -1070,9 +1541,8 @@ const OfdStatusBadge = observer(({receiptId}: { receiptId?: string }) => {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default observer(function App() {
-    const {auth, posAuth, posStore, receiptStore} = useStore();
+    const {auth, posAuth, posStore, receiptStore, ofdStore} = useStore();
 
-    // Local UI state
     const [category, setCategory] = useState("Все");
     const [search, setSearch] = useState("");
     const [view, setView] = useState<AppView>("pos");
@@ -1085,6 +1555,7 @@ export default observer(function App() {
     const [showCloseModal, setShowCloseModal] = useState(false);
     const [showOfdSettings, setShowOfdSettings] = useState(false);
     const [showApiSettings, setShowApiSettings] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
     const [scanningProductId, setScanningProductId] = useState<number | null>(null);
     const [isPaying, setIsPaying] = useState(false);
     const [lastReceipt, setLastReceipt] = useState<{
@@ -1095,10 +1566,18 @@ export default observer(function App() {
         number: number; cashier: string; openTime: string; openCash: number;
     } | null>(null);
 
-    // Auto-connect OFD on mount
+    // Auto-connect Ferma on mount
     useEffect(() => {
         if (!auth.isConnected && !auth.isLoading) auth.authenticate();
     }, []);
+
+    // Show history modal when mobile history tab selected
+    useEffect(() => {
+        if (mobileTab === "history") {
+            setShowHistory(true);
+            setMobileTab("catalog");
+        }
+    }, [mobileTab]);
 
     const allCategories = ["Все", ...posStore.categories];
     const subtotal = posStore.cartTotal;
@@ -1327,12 +1806,19 @@ export default observer(function App() {
                                     ? cashNum >= total ? `Принять — ${fmt(total)}` : `Не хватает ${fmt(total - cashNum)}`
                                     : `Оплата картой — ${fmt(total)}`}
                         </button>
+                        {/* OFD status banner — uses ofdStore for Integration v1.71 */}
                         <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg border ${
-                            auth.isConnected ? "bg-primary/5 border-primary/20 text-primary" : "bg-muted border-border text-muted-foreground"
+                            ofdStore.isConnected ? "bg-primary/5 border-primary/20 text-primary"
+                                : auth.isConnected ? "bg-primary/5 border-primary/20 text-primary"
+                                    : "bg-muted border-border text-muted-foreground"
                         }`}>
-                            {auth.isConnected ? <Wifi className="w-3.5 h-3.5 shrink-0"/> :
+                            {(ofdStore.isConnected || auth.isConnected) ? <Wifi className="w-3.5 h-3.5 shrink-0"/> :
                                 <WifiOff className="w-3.5 h-3.5 shrink-0"/>}
-                            {auth.isConnected ? "ОФД Ferma® подключён · чек будет отправлен автоматически" : "ОФД не подключён · чек сохраняется локально"}
+                            {ofdStore.isConnected
+                                ? "OFD.ru подключён · чек будет зарегистрирован"
+                                : auth.isConnected
+                                    ? "ОФД Ferma® подключён · чек будет отправлен автоматически"
+                                    : "ОФД не подключён · чек сохраняется локально"}
                         </div>
                     </div>
                 </div>
@@ -1362,23 +1848,19 @@ export default observer(function App() {
                     </button>
                 </div>
 
-                {/* Products loading indicator */}
                 {posStore.isLoadingProducts && (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin"/>
-                        Загрузка товаров из БД...
+                        <Loader2 className="w-3.5 h-3.5 animate-spin"/>Загрузка товаров из БД...
                     </div>
                 )}
                 {posStore.productsError && (
                     <div className="flex items-center gap-2 text-xs text-accent px-1">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
-                        {posStore.productsError}
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{posStore.productsError}
                     </div>
                 )}
                 {posStore.productsFromApi && (
                     <div className="flex items-center gap-2 text-xs text-primary px-1">
-                        <Database className="w-3.5 h-3.5"/>
-                        Товары синхронизированы с MySQL
+                        <Database className="w-3.5 h-3.5"/>Товары синхронизированы с MySQL
                     </div>
                 )}
 
@@ -1399,7 +1881,6 @@ export default observer(function App() {
                         return (
                             <div key={p.id}
                                  className={`relative text-left bg-card border rounded-xl p-3 transition-all group ${inCart ? "border-primary/40 bg-primary/5" : "border-border"}`}>
-                                {/* Edit / Delete buttons on hover */}
                                 <div className="absolute top-2 right-2 hidden group-hover:flex gap-1">
                                     <button
                                         onClick={e => {
@@ -1590,7 +2071,6 @@ export default observer(function App() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2 sm:gap-3">
-                    {/* User badge */}
                     {posAuth.user && (
                         <div
                             className="hidden sm:flex items-center gap-1.5 h-7 px-2.5 bg-secondary border border-border rounded-lg text-xs text-muted-foreground">
@@ -1599,12 +2079,24 @@ export default observer(function App() {
                         </div>
                     )}
 
-                    {/* OFD indicator */}
+                    {/* OFD Integration status indicator (v1.71) */}
                     <button onClick={() => setShowOfdSettings(true)}
-                            className={`hidden sm:flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-medium transition-colors ${auth.isConnected ? "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10" : "bg-muted border-border text-muted-foreground hover:border-primary/30"}`}>
-                        {auth.isLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : auth.isConnected ?
-                            <Wifi className="w-3 h-3"/> : <WifiOff className="w-3 h-3"/>}
+                            className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                                ofdStore.isConnected
+                                    ? "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+                                    : "bg-muted border-border text-muted-foreground hover:border-primary/30"
+                            }`}>
+                        {ofdStore.isConnecting ? <Loader2 className="w-3 h-3 animate-spin"/>
+                            : ofdStore.isConnected ? <Wifi className="w-3 h-3"/>
+                                : <WifiOff className="w-3 h-3"/>}
                         <span className="hidden md:inline">ОФД</span>
+                    </button>
+
+                    {/* History button (desktop) */}
+                    <button onClick={() => setShowHistory(true)}
+                            className="hidden sm:flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-border bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                        <History className="w-3 h-3"/>
+                        <span className="hidden md:inline">История</span>
                     </button>
 
                     <div className="text-right hidden sm:block">
@@ -1624,7 +2116,6 @@ export default observer(function App() {
                         <Settings className="w-4 h-4"/>
                     </button>
 
-                    {/* Logout */}
                     <button onClick={() => {
                         posStore.closeShift();
                         posAuth.logout();
@@ -1670,6 +2161,17 @@ export default observer(function App() {
 									className="absolute -bottom-1 -right-1 w-3 h-3 bg-accent rounded-full border-2 border-card"/>}
                             </div>
                             <span className="text-xs font-medium">Чек{total > 0 ? ` · ${fmt(total)}` : ""}</span>
+                        </button>
+                        <button onClick={() => setShowHistory(true)}
+                                className="flex-1 flex flex-col items-center justify-center py-3 gap-1 text-muted-foreground transition-colors">
+                            <div className="relative">
+                                <History className="w-5 h-5"/>
+                                {ofdStore.isConnected && (
+                                    <span
+                                        className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full border-2 border-card"/>
+                                )}
+                            </div>
+                            <span className="text-xs font-medium">История</span>
                         </button>
                     </div>
                 </div>
@@ -1717,6 +2219,7 @@ export default observer(function App() {
 
             {showOfdSettings && <OfdSettingsModal onClose={() => setShowOfdSettings(false)}/>}
             {showApiSettings && <ApiSettingsModal onClose={() => setShowApiSettings(false)}/>}
+            {showHistory && <HistoryModal onClose={() => setShowHistory(false)}/>}
         </div>
     );
 });
