@@ -4,6 +4,7 @@ import {
     AlertTriangle,
     ArrowDownRight,
     ArrowUpRight,
+    BadgeCheck,
     Banknote,
     BarChart3,
     Building2,
@@ -23,7 +24,6 @@ import {
     FileText,
     History,
     Info,
-    KeyRound,
     LayoutGrid,
     ListOrdered,
     Loader2,
@@ -58,13 +58,14 @@ import {useStore} from "../stores/rootStore";
 import type {CartItem, Category, PaymentMethod, Product} from "../stores/posStore";
 import type {ReceiptDetail, ReceiptShort} from "../api/ofdApi";
 import {TAXATION_LABELS} from "../api/ofdApi";
+import {INITIAL_AUTH} from "../stores/authStore";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRESET_CATEGORIES = ["Напитки", "Выпечка", "Молочные", "Снеки", "Табак"];
 const PRESET_EMOJIS = ["🥤", "💧", "🍊", "⚡", "☕", "🥐", "🥖", "🫓", "🥛", "🍶", "🧀", "🫙", "🥔", "🍫", "🥜", "🚬", "🔥", "🍕", "🍔", "🌮", "🍱", "🥗", "🍰", "🍩", "🍬", "🧃", "🍺", "🫖", "🧴", "🪥", "📦", "🛒"];
 const CASHIERS = ["Глазырина С."];
-const TAX_RATE = 0.20;
+const TAX_RATE = 0.0;
 
 const fmt = (n: number) =>
     n.toLocaleString("ru-RU", {style: "currency", currency: "RUB", minimumFractionDigits: 2});
@@ -141,7 +142,7 @@ function NumPad({value, onChange}: { value: string; onChange: (v: string) => voi
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 
 const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => void }) => {
-    const {posAuth, posStore} = useStore();
+    const {posAuth, posStore, ofdStore, auth} = useStore();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [showPass, setShowPass] = useState(false);
@@ -157,6 +158,15 @@ const LoginScreen = observer(({onShowApiSettings}: { onShowApiSettings: () => vo
         if (ok) {
             posStore.loadProducts();
             posStore.loadCategories();
+            ofdStore.loadOfdConfig();
+            auth.setFermaConfig({
+                login: ofdStore.config.login.trim(),
+                password: ofdStore.config.password.trim(),
+                inn: ofdStore.config.inn.trim(),
+                cashierName: CASHIERS[0],
+                taxationSystem: "SimpleIn",
+                baseUrl: ofdStore.config.baseUrl.trim() || "https://ferma.ofd.ru"
+            });
         }
     };
 
@@ -284,7 +294,7 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
                             setUrl(e.target.value);
                             setTestResult("idle");
                         }}
-                               placeholder="https://wfm.utitel.ru/swagger/index.html#"
+                               placeholder="https://wfm.utitel.ru/"
                                className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
                     </div>
 
@@ -350,146 +360,251 @@ const ApiSettingsModal = observer(({onClose}: { onClose: () => void }) => {
 
 // ─── OFD Integration Settings Modal (v1.71 API) ───────────────────────────────
 
+type OfdSettingsTab = "ferma" | "integration";
+
+const TAXATION_OPTIONS: { value: string; label: string }[] = [
+    {value: "Common", label: "ОСН — Общая"},
+    {value: "SimpleIn", label: "УСН доход"},
+    {value: "SimpleInOut", label: "УСН доход−расход"},
+    {value: "Unified", label: "ЕНВД"},
+    {value: "UnifiedAgricultural", label: "ЕСХН"},
+    {value: "Patent", label: "Патент"},
+];
+
 const OfdSettingsModal = observer(({onClose}: { onClose: () => void }) => {
-    const {ofdStore} = useStore();
+    const {ofdStore, auth} = useStore();
+    const [tab, setTab] = useState<OfdSettingsTab>("ferma");
+
+    // ── Ferma v2.84 state ──
+    const [fLogin, setFLogin] = useState(auth.login);
+    const [fPassword, setFPassword] = useState(auth.password);
+    const [fInn, setFInn] = useState(auth.inn);
+    const [fCashier, setFCashier] = useState(auth.cashierName);
+    const [fTaxation, setFTaxation] = useState<string>(auth.taxationSystem);
+    const [fBaseUrl, setFBaseUrl] = useState(auth.baseUrl);
+    const [showFPass, setShowFPass] = useState(false);
+
+    // ── Integration v1.71 state ──
     const [authToken, setAuthToken] = useState(ofdStore.config.authToken);
     const [inn, setInn] = useState(ofdStore.config.inn);
     const [baseUrl, setBaseUrl] = useState(ofdStore.config.baseUrl);
     const [showToken, setShowToken] = useState(false);
 
-    const handleSave = async () => {
+    // ── Ferma handlers ──
+    const handleFermaSave = () => {
+        auth.setFermaConfig({
+            login: fLogin.trim(),
+            password: fPassword,
+            inn: fInn.trim(),
+            cashierName: fCashier.trim(),
+            taxationSystem: fTaxation as never,
+            baseUrl: fBaseUrl.trim() || "https://ferma.ofd.ru",
+        });
+        onClose();
+    };
+
+    const handleFermaTest = async () => {
+        auth.setFermaConfig({
+            login: fLogin.trim(),
+            password: fPassword,
+            inn: fInn.trim(),
+            cashierName: fCashier.trim(),
+            taxationSystem: fTaxation as never,
+            baseUrl: fBaseUrl.trim() || "https://ferma.ofd.ru",
+        });
+        await auth.authenticate();
+    };
+    const setTestOfd = async () => {
+        setFLogin(INITIAL_AUTH.login);
+        setFPassword(INITIAL_AUTH.password);
+        setFInn(INITIAL_AUTH.inn);
+        setFCashier(INITIAL_AUTH.cashierName);
+        setFTaxation(INITIAL_AUTH.taxationSystem);
+        setFBaseUrl(INITIAL_AUTH.baseUrl)
+        handleFermaTest();
+    }
+    const setProductiveOfd = async () => {
+        ofdStore.loadOfdConfig();
+        setFLogin(ofdStore.config.login.trim());
+        setFPassword(ofdStore.config.password.trim());
+        setFInn(ofdStore.config.inn.trim());
+        setFCashier(CASHIERS[0]);
+        setFTaxation("SimpleIn");
+        setFBaseUrl(ofdStore.config.baseUrl.trim() || "https://ferma.ofd.ru")
+        handleFermaTest();
+    }
+
+    // ── Integration handlers ──
+    const handleIntSave = () => {
         ofdStore.setConfig({authToken: authToken.trim(), inn: inn.trim(), baseUrl: baseUrl.trim()});
         onClose();
     };
 
-    const handleTest = async () => {
+    const handleIntTest = async () => {
         ofdStore.setConfig({authToken: authToken.trim(), inn: inn.trim(), baseUrl: baseUrl.trim()});
         await ofdStore.testConnection();
     };
 
-    const statusColor = ofdStore.isConnected ? "text-primary" : ofdStore.isConnecting ? "text-accent" : "text-destructive";
-    const statusText = ofdStore.isConnected
-        ? `Подключено · ${ofdStore.kktList.length} ККТ`
-        : ofdStore.isConnecting ? "Проверка соединения..."
-            : ofdStore.connectionError ?? "Не подключено";
+    const fermaStatusOk = auth.isConnected && auth.isTokenValid;
+    const intStatusColor = ofdStore.isConnected ? "text-primary" : ofdStore.isConnecting ? "text-yellow-500" : "text-destructive";
 
     return (
         <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
             <div
                 className="w-full sm:max-w-lg bg-card border border-border sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[95vh] flex flex-col">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 pt-4 pb-0 shrink-0">
                     <div className="flex items-center gap-2">
                         <Settings className="w-5 h-5 text-primary"/>
-                        <div>
-                            <h2 className="font-bold text-foreground leading-none">Настройки OFD.ru</h2>
-                            <p className="text-muted-foreground text-xs mt-0.5">Integration API v1.71</p>
-                        </div>
+                        <h2 className="font-bold text-foreground">Настройки OFD.ru</h2>
                     </div>
                     <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
                         <X className="w-5 h-5"/>
                     </button>
                 </div>
 
-                <div className="overflow-y-auto flex-1 p-5 space-y-4">
-                    {/* Connection status */}
-                    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 border ${
-                        ofdStore.isConnected ? "bg-primary/5 border-primary/20" : "bg-muted border-border"
-                    }`}>
-                        {ofdStore.isConnecting
-                            ? <Loader2 className="w-4 h-4 text-accent animate-spin shrink-0"/>
-                            : ofdStore.isConnected
-                                ? <Wifi className="w-4 h-4 text-primary shrink-0"/>
-                                : <WifiOff className="w-4 h-4 text-muted-foreground shrink-0"/>}
-                        <span className={`text-sm font-medium ${statusColor}`}>{statusText}</span>
-                    </div>
+                {/* Tabs */}
 
-                    {/* API Token */}
-                    <div>
-                        <label
-                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                            <KeyRound className="w-3.5 h-3.5"/>API-ключ
-                        </label>
-                        <div className="relative">
-                            <input type={showToken ? "text" : "password"} value={authToken}
-                                   onChange={e => setAuthToken(e.target.value)}
-                                   placeholder="Ключ из lk.ofd.ru → Настройки → Передача данных → API"
-                                   className="w-full h-11 bg-secondary border border-border rounded-xl px-3 pr-11 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
-                            <button type="button" onClick={() => setShowToken(v => !v)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                                {showToken ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
-                            </button>
-                        </div>
-                    </div>
 
-                    {/* INN */}
-                    <div>
-                        <label
-                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5"/>ИНН организации
-                        </label>
-                        <input value={inn} onChange={e => setInn(e.target.value)} inputMode="numeric" maxLength={12}
-                               placeholder="000000000000"
-                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
-                    </div>
+                {/* ────────────────── Tab: Ферма v2.84 ────────────────── */}
+                {tab === "ferma" && (
+                    <>
+                        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
 
-                    {/* Base URL */}
-                    <div>
-                        <label
-                            className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                            <Server className="w-3.5 h-3.5"/>Base URL
-                        </label>
-                        <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)}
-                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
-                        <button onClick={() => setBaseUrl("https://lk-demo.ofd.ru/api/integration/v2")}
-                                className="mt-1.5 text-xs text-primary hover:underline">Использовать demo-стенд
-                        </button>
-                    </div>
+                            {/* Status banner */}
+                            <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${
+                                fermaStatusOk ? "bg-primary/5 border-primary/20" : auth.isLoading ? "bg-yellow-500/5 border-yellow-500/20" : "bg-muted border-border"
+                            }`}>
+                                {auth.isLoading
+                                    ? <Loader2 className="w-4 h-4 text-yellow-500 animate-spin shrink-0"/>
+                                    : fermaStatusOk
+                                        ? <BadgeCheck className="w-4 h-4 text-primary shrink-0"/>
+                                        : <WifiOff className="w-4 h-4 text-muted-foreground shrink-0"/>}
+                                <div className="min-w-0">
+                                    <p className={`text-sm font-semibold ${fermaStatusOk ? "text-primary" : auth.isLoading ? "text-yellow-500" : "text-muted-foreground"}`}>
+                                        {auth.isLoading ? "Авторизация..." : fermaStatusOk ? "Подключено · токен действует" : auth.error ?? "Не авторизован"}
+                                    </p>
+                                    {fermaStatusOk && auth.tokenExpiresStr && (
+                                        <p className="text-xs text-muted-foreground font-mono truncate">до {auth.tokenExpiresStr}</p>
+                                    )}
+                                </div>
+                            </div>
 
-                    {/* KKT list if connected */}
-                    {ofdStore.kktList.length > 0 && (
-                        <div className="bg-muted rounded-xl overflow-hidden">
-                            <p className="text-xs font-semibold text-foreground px-4 pt-3 pb-2 flex items-center gap-1.5">
-                                <Monitor className="w-3.5 h-3.5 text-muted-foreground"/>ККТ в аккаунте
-                            </p>
-                            <div className="divide-y divide-border">
-                                {ofdStore.kktList.map(kkt => (
-                                    <div key={kkt.Id} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-medium text-foreground truncate">{kkt.KktModel}</p>
-                                            <p className="text-xs font-mono text-muted-foreground">РН {kkt.RnmNumber}</p>
-                                        </div>
-                                        <div className="text-right shrink-0">
-                                            <p className="text-xs text-muted-foreground">ФН до</p>
-                                            <p className="text-xs font-mono text-foreground">{fmtDate(kkt.FnEndDate)}</p>
-                                        </div>
+                            {/* Credentials row */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label
+                                        className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                        <User className="w-3 h-3"/>Логин
+                                    </label>
+                                    <input value={fLogin} onChange={e => setFLogin(e.target.value)}
+                                           autoComplete="username"
+                                           placeholder="login"
+                                           className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                                </div>
+                                <div>
+                                    <label
+                                        className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                        <Lock className="w-3 h-3"/>Пароль
+                                    </label>
+                                    <div className="relative">
+                                        <input type={showFPass ? "text" : "password"} value={fPassword}
+                                               onChange={e => setFPassword(e.target.value)}
+                                               autoComplete="current-password"
+                                               placeholder="••••••••"
+                                               className="w-full h-11 bg-secondary border border-border rounded-xl px-3 pr-11 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                                        <button type="button" onClick={() => setShowFPass(v => !v)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                                            {showFPass ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                                        </button>
                                     </div>
-                                ))}
+                                </div>
+                            </div>
+
+                            {/* INN */}
+                            <div>
+                                <label
+                                    className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                                    <Building2 className="w-3.5 h-3.5"/>ИНН организации
+                                </label>
+                                <input value={fInn} onChange={e => setFInn(e.target.value.replace(/\D/g, ""))}
+                                       inputMode="numeric" maxLength={12} placeholder="000000000000"
+                                       className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                            </div>
+
+                            {/* Cashier */}
+                            <div>
+                                <label
+                                    className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                                    <UserCircle className="w-3.5 h-3.5"/>Кассир (имя по умолчанию)
+                                </label>
+                                <input value={fCashier} onChange={e => setFCashier(e.target.value)}
+                                       placeholder="Иванова А.Н."
+                                       className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm focus:outline-none focus:border-primary/60 transition-colors"/>
+                            </div>
+
+                            {/* Taxation system */}
+                            <div>
+                                <label
+                                    className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                                    <BarChart3 className="w-3.5 h-3.5"/>Система налогообложения
+                                </label>
+                                <select value={fTaxation} onChange={e => setFTaxation(e.target.value)}
+                                        className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm focus:outline-none focus:border-primary/60 transition-colors appearance-none cursor-pointer">
+                                    {TAXATION_OPTIONS.map(o => (
+                                        <option key={o.value} value={o.value}>{o.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Base URL */}
+                            <div>
+                                <label
+                                    className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                                    <Server className="w-3.5 h-3.5"/>Сервер Ферма®
+                                </label>
+                                <div className="flex gap-2 mb-2">
+                                    <button onClick={() => setTestOfd()}
+                                            className={`flex-1 h-9 rounded-lg text-xs font-semibold border transition-all
+                      ${fBaseUrl === "https://ferma-test.ofd.ru" ? "bg-yellow-500/10 border-yellow-500/40 text-yellow-600" : "bg-secondary border-border text-muted-foreground hover:text-foreground"}`}>
+                                        Тест-стенд
+                                    </button>
+                                    <button onClick={() => setProductiveOfd()}
+                                            className={`flex-1 h-9 rounded-lg text-xs font-semibold border transition-all
+                      ${fBaseUrl === "https://ferma.ofd.ru" ? "bg-primary/10 border-primary/40 text-primary" : "bg-secondary border-border text-muted-foreground hover:text-foreground"}`}>
+                                        Продуктивный
+                                    </button>
+                                </div>
+                                <input value={fBaseUrl} onChange={e => setFBaseUrl(e.target.value)}
+                                       className="w-full h-11 bg-secondary border border-border rounded-xl px-3 text-sm font-mono focus:outline-none focus:border-primary/60 transition-colors"/>
+                            </div>
+
+                            <div className="bg-muted rounded-xl p-3 flex gap-2">
+                                <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5"/>
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                    Логин и пароль выдаёт ОФД при подключении облачной ККТ. API v2.84 поддерживает
+                                    НДС 5%, 7%, 22% и новые типы чеков (авансы, коррекции, расход).
+                                </p>
                             </div>
                         </div>
-                    )}
 
-                    <div className="bg-muted rounded-xl p-3 flex gap-2">
-                        <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5"/>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                            API-ключ получите в личном кабинете <span className="font-mono">lk.ofd.ru</span> →
-                            Настройки → Передача данных → API-интеграция.
-                        </p>
-                    </div>
-                </div>
+                        <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
+                            <button onClick={handleFermaTest} disabled={auth.isLoading || !fLogin || !fPassword}
+                                    className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                                {auth.isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> :
+                                    <RefreshCw className="w-4 h-4"/>}
+                                Проверить
+                            </button>
+                            <button onClick={handleFermaSave}
+                                    className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                                <CheckSquare className="w-4 h-4"/>Сохранить
+                            </button>
+                        </div>
+                    </>
+                )}
 
-                <div className="px-5 py-4 border-t border-border shrink-0 flex gap-3">
-                    <button onClick={handleTest} disabled={ofdStore.isConnecting || !authToken || !inn}
-                            className="flex-1 h-12 bg-secondary border border-border rounded-xl font-semibold text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-                        {ofdStore.isConnecting ? <Loader2 className="w-4 h-4 animate-spin"/> :
-                            <RefreshCw className="w-4 h-4"/>}
-                        Проверить
-                    </button>
-                    <button onClick={handleSave}
-                            className="flex-1 h-12 bg-primary text-primary-foreground rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
-                        <CheckSquare className="w-4 h-4"/>Сохранить
-                    </button>
-                </div>
             </div>
         </div>
     );
@@ -1538,8 +1653,8 @@ const OfdStatusBadge = observer(({receiptId}: { receiptId?: string }) => {
     return (
         <div className={`flex items-center gap-1.5 rounded-lg px-3 py-2 border text-xs font-medium ${cfg.cls}`}>
             {cfg.icon}<span>{cfg.label}</span>
-            {sent.status === "confirmed" && sent.fiscalData?.FiscalSign && (
-                <span className="font-mono opacity-70">· ФП {sent.fiscalData.FiscalSign}</span>
+            {sent.status === "confirmed" && sent.fiscalData?.Device?.FPD && (
+                <span className="font-mono opacity-70">· ФП {sent.fiscalData.Device?.FPD}</span>
             )}
         </div>
     );
@@ -1548,7 +1663,7 @@ const OfdStatusBadge = observer(({receiptId}: { receiptId?: string }) => {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default observer(function App() {
-    const {auth, posAuth, posStore, receiptStore, ofdStore} = useStore();
+    const {auth, posAuth, posStore, receiptStore, ofdStore, markingStore} = useStore();
 
     const [category, setCategory] = useState("Все");
     const [search, setSearch] = useState("");
@@ -1616,10 +1731,15 @@ export default observer(function App() {
         if (payMethod === "cash" && cashNum < total) return;
         setIsPaying(true);
         const cartSnapshot = posStore.cart.map(i => ({...i}));
+        const isMarked = Promise.all([
+            posStore.cart.map(i => i.markCodes.map(m => markingStore.checkCode(m)))
+        ])
+        console.log("isMarked", isMarked);
         const result = await posStore.processPayment(
             payMethod,
             payMethod === "cash" ? cashNum : 0,
-            payMethod === "card" ? total : 0
+            payMethod === "card" ? total : 0,
+            "info@podarokmaster.ru"
         );
         setIsPaying(false);
         if (result) {
@@ -1717,7 +1837,7 @@ export default observer(function App() {
                         <div className="border-t border-border mx-5"/>
                         <div className="p-5 space-y-2 text-sm">
                             <div className="flex justify-between text-muted-foreground">
-                                <span>НДС 20%</span><span className="font-mono">{fmt(tax)}</span>
+                                <span>НДС</span><span className="font-mono">{fmt(tax)}</span>
                             </div>
                             <div className="flex justify-between text-lg font-bold text-foreground">
                                 <span>ИТОГО</span><span
@@ -2053,7 +2173,7 @@ export default observer(function App() {
                         {discount > 0 && <div className="flex justify-between text-sm text-accent">
 							<span>Скидка {discount}%</span><span className="font-mono">− {fmt(discountAmt)}</span>
 						</div>}
-                        <div className="flex justify-between text-sm text-muted-foreground"><span>НДС 20%</span><span
+                        <div className="flex justify-between text-sm text-muted-foreground"><span>НДС</span><span
                             className="font-mono">{fmt(tax)}</span></div>
                     </>
                 )}
@@ -2098,12 +2218,12 @@ export default observer(function App() {
                     {/* OFD Integration status indicator (v1.71) */}
                     <button onClick={() => setShowOfdSettings(true)}
                             className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-medium transition-colors ${
-                                ofdStore.isConnected
+                                auth.isConnected
                                     ? "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
                                     : "bg-muted border-border text-muted-foreground hover:border-primary/30"
                             }`}>
                         {ofdStore.isConnecting ? <Loader2 className="w-3 h-3 animate-spin"/>
-                            : ofdStore.isConnected ? <Wifi className="w-3 h-3"/>
+                            : auth.isConnected ? <Wifi className="w-3 h-3"/>
                                 : <WifiOff className="w-3 h-3"/>}
                         <span className="hidden md:inline">ОФД</span>
                     </button>

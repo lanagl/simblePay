@@ -25,8 +25,8 @@ export class MarkingStore {
     return this.results.get(code);
   }
 
-  /** Check a single marking code via Ferma PIOT API */
-  async checkCode(code: string, totalSum: number): Promise<boolean> {
+  /** Check a single marking code via Ferma PIOT API v2.84 */
+  async checkCode(code: string): Promise<boolean> {
     const token = await this.auth.ensureToken();
     if (!token) {
       runInAction(() => { this.lastError = "Нет авторизации"; });
@@ -40,16 +40,13 @@ export class MarkingStore {
     });
 
     try {
-      const checkRes = await fermaApi.checkMarkingCodes(token, {
-        Request: {
-          Items: [{ Type: "UNKNOWN_PRODUCT_CODE", Code: code, PlannedStatus: "PIECE_PRODUCT_INCOME" }],
-          TotalSum: totalSum,
-          OperationType: 1,
-        },
+      const checkRes = await fermaApi.checkMarkingCode(token, {
+        Type: "UNKNOWN_PRODUCT_CODE",
+        Code: code,
+        PlannedStatus: "PIECE_PRODUCT_INCOME",
       });
 
-      // Poll status
-      const result = await this.pollCheckStatus(token, checkRes.Id, code);
+      const result = await this.pollCheckStatus(token, checkRes.McId, code);
       runInAction(() => { this.isChecking = false; });
       return result;
     } catch (err) {
@@ -66,7 +63,7 @@ export class MarkingStore {
     }
   }
 
-  private async pollCheckStatus(token: string, checkId: string, code: string, attempts = 0): Promise<boolean> {
+  private async pollCheckStatus(token: string, mcId: string, code: string, attempts = 0): Promise<boolean> {
     if (attempts > 10) {
       runInAction(() => {
         this.results.set(code, { code, status: "error", error: "Превышено время ожидания CRPT" });
@@ -77,29 +74,29 @@ export class MarkingStore {
     await new Promise<void>((r) => setTimeout(r, 1000));
 
     try {
-      const res = await fermaApi.getMarkingCheckStatus(token, checkId);
-      if (res.Status === 1) {
-        // READY
-        const item = res.Items?.[0];
-        const ok = item?.Status === 0;
+      const res = await fermaApi.getMarkingCheckStatus(token, mcId);
+      if (res.code === 0 && res.codes !== undefined) {
+        const item = res.codes[0];
+        const ok = item?.valid === true;
         runInAction(() => {
           this.results.set(code, {
             code,
             status: ok ? "ok" : "error",
-            error: ok ? undefined : (item?.Error ?? "КМ не прошёл проверку CRPT"),
+            error: ok ? undefined : (item?.errorCode !== undefined ? `Код ошибки CRPT: ${item.errorCode}` : "КМ не прошёл проверку CRPT"),
           });
         });
         return ok;
-      } else if (res.Status === 2) {
+      } else if (res.code !== 0) {
         runInAction(() => {
-          this.results.set(code, { code, status: "error", error: "Ошибка CRPT" });
+          this.results.set(code, { code, status: "error", error: res.description ?? "Ошибка CRPT" });
         });
         return false;
       } else {
-        return this.pollCheckStatus(token, checkId, code, attempts + 1);
+        // Still processing — codes is undefined
+        return this.pollCheckStatus(token, mcId, code, attempts + 1);
       }
     } catch {
-      return this.pollCheckStatus(token, checkId, code, attempts + 1);
+      return this.pollCheckStatus(token, mcId, code, attempts + 1);
     }
   }
 

@@ -21,7 +21,7 @@ export class RootStore {
         this.receiptStore = new ReceiptStore(this.auth);
         this.markingStore = new MarkingStore(this.auth);
         this.posStore = new PosStore(this.auth, this.receiptStore, this.posAuth);
-        this.ofdStore = new OfdStore();
+        this.ofdStore = new OfdStore(this.posAuth);
     }
 }
 

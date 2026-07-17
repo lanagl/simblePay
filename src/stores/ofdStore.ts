@@ -2,14 +2,16 @@ import {makeAutoObservable, runInAction} from "mobx";
 import ofdApi, {
     KktInfo,
     KktListItem,
-    loadOfdConfig,
     OfdApiError,
-    OfdConfig,
     ReceiptDetail,
     ReceiptShort,
     saveOfdConfig,
     ZReport,
 } from "../api/ofdApi";
+
+import {OfdConfig} from "../api/posApi";
+import type {PosAuthStore} from "./posAuthStore.ts";
+import posApi from "../api/posApi.ts";
 
 function isoDate(d: Date) {
     return d.toISOString().split("T")[0] + "T00:00:00";
@@ -20,8 +22,15 @@ function isoDateEnd(d: Date) {
     return s + "T23:59:59";
 }
 
+const INITIAL_CONFIG: OfdConfig = {
+    login: "", baseUrl: "https://ferma-test.ofd.ru", password: "", authToken: "", inn: ""
+
+}
+
 export class OfdStore {
-    config: OfdConfig = loadOfdConfig();
+    private posAuth: PosAuthStore;
+
+    config: OfdConfig = INITIAL_CONFIG;
 
     // Connection state
     isConnected = false;
@@ -58,7 +67,8 @@ export class OfdStore {
     // Selected KKT
     selectedKktRnm: string | null = null;
 
-    constructor() {
+    constructor(posAuth: PosAuthStore) {
+        this.posAuth = posAuth;
         makeAutoObservable(this);
         if (this.config.authToken) this.testConnection();
     }
@@ -76,7 +86,22 @@ export class OfdStore {
     }
 
     get configValid(): boolean {
-        return !!(this.config.authToken && this.config.inn);
+        return !!(this.config.authToken);
+    }
+
+    async loadOfdConfig(): Promise<void> {
+        const {token} = this.posAuth;
+
+        try {
+            const config = await posApi.loadOfdConfig(token ?? "");
+            console.log("config", config);
+            runInAction(() => {
+                this.config = config[0];
+            });
+            this.testConnection();
+        } catch {
+
+        }
     }
 
     // ─── Connection test ──────────────────────────────────────────────────────
@@ -96,11 +121,10 @@ export class OfdStore {
         });
 
         try {
-            const list = await ofdApi.getKkts(this.config);
+            const list = this.configValid;
             runInAction(() => {
                 this.isConnected = true;
                 this.isConnecting = false;
-                this.kktInfo = list;
                 // if (list.length > 0 && !this.selectedKktRnm) {
                 //     this.selectedKktRnm = list[0].RnmNumber;
                 // }

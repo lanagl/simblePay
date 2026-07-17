@@ -1,7 +1,7 @@
 import {makeAutoObservable, runInAction} from "mobx";
 import type {AuthStore} from "./authStore";
 import type {ReceiptStore} from "./receiptStore";
-import type {ReceiptRequest, VatType} from "../api/fermaApi";
+import type {PaymentSumType, ReceiptRequest, VatType} from "../api/fermaApi";
 import posApi, {ApiProduct} from "../api/posApi";
 import type {PosAuthStore} from "./posAuthStore";
 
@@ -367,7 +367,7 @@ export class PosStore {
                 Price: ci.product.price,
                 Quantity: ci.qty,
                 Amount: ci.product.price * ci.qty,
-                Vat: "Vat20" as VatType,
+                Vat: "VatNo" as VatType,
                 Measure: "PIECE" as const,
                 PaymentMethod: 4,
             };
@@ -387,7 +387,7 @@ export class PosStore {
             return [base];
         });
 
-        const paymentItems: Array<{ PaymentType: number; Sum: number }> = [];
+        const paymentItems: Array<{ PaymentType: PaymentSumType; Sum: number }> = [];
         if (receipt.paymentMethod === "cash") {
             paymentItems.push({PaymentType: 0, Sum: receipt.total});
         } else if (receipt.paymentMethod === "card") {
@@ -402,12 +402,12 @@ export class PosStore {
             Type: "Income",
             InvoiceId: receipt.id,
             CustomerReceipt: {
-                TaxationSystem: "Common",
+                TaxationSystem: this.auth.taxationSystem ?? "Common",
                 Email: customerEmail,
                 Items: items,
                 PaymentItems: paymentItems,
             },
-            Cashier: {Name: shift.cashier},
+            Cashier: {Name: this.auth.cashierName || shift.cashier},
         };
     }
 }
