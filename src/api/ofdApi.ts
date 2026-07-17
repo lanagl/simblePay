@@ -3,8 +3,10 @@
 // Auth: AuthToken query parameter (API key from lk.ofd.ru/settings/data-transfer/api/api-key)
 // Rate limit: 1 request/second
 
-export const OFD_BASE_URL = "https://ofd.ru/api/integration/v2";
-export const OFD_DEMO_BASE_URL = "https://lk-demo.ofd.ru/api/integration/v2";
+import {OfdConfig} from "./posApi.ts";
+
+export const OFD_BASE_URL = "https://ferma.ofd.ru";
+export const OFD_DEMO_BASE_URL = "https://ferma-test.ofd.ru";
 export const OFD_RECEIPT_VIEW_BASE = "https://ofd.ru/rec";
 
 // ─── Standard response envelope ───────────────────────────────────────────────
@@ -154,20 +156,6 @@ export class OfdApiError extends Error {
 
 const STORAGE_KEY = "ofd_integration_config";
 
-export interface OfdConfig {
-    baseUrl: string;
-    authToken: string;
-    inn: string;
-}
-
-export function loadOfdConfig(): OfdConfig {
-    try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) return JSON.parse(saved);
-    } catch { /* ignore */
-    }
-    return {baseUrl: OFD_BASE_URL, authToken: "", inn: ""};
-}
 
 export function saveOfdConfig(cfg: OfdConfig) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));

@@ -51,6 +51,14 @@ export interface ApiProduct {
     is_marked: boolean; // MySQL snake_case
 }
 
+export interface OfdConfig {
+    baseUrl: string;
+    login: string;
+    password: string;
+    authToken: string;
+    inn: string;
+}
+
 export class ApiError extends Error {
     status: number;
     body: unknown;
@@ -150,6 +158,10 @@ export const posApi = {
         return request<ApiProduct[]>("POST", "Entity/Kassa/data", body, token);
     },
 
+
+    loadOfdConfig(token: string): Promise<OfdConfig[]> {
+        return request<OfdConfig[]>("POST", "Entity/KassaSettings/data", undefined, token);
+    },
     /** GET /categories */
     getCategories(token: string): Promise<ApiProduct[]> {
         const body = {
