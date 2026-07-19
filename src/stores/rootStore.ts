@@ -3,17 +3,14 @@ import {PosAuthStore} from "./posAuthStore";
 import {PosStore} from "./posStore";
 import {ReceiptStore} from "./receiptStore";
 import {MarkingStore} from "./markingStore";
-import {OfdStore} from "./ofdStore";
-// AuthStore (Ferma) kept for backward compat but superseded by OfdStore
 import {AuthStore} from "./authStore";
 
 export class RootStore {
-    posAuth: PosAuthStore;   // POS user auth (MySQL backend)
-    posStore: PosStore;      // Cart, products, shift
-    receiptStore: ReceiptStore; // Local receipt history (Ferma-side, legacy)
-    markingStore: MarkingStore; // Marking code checks
-    ofdStore: OfdStore;         // OFD.ru Integration v1.71 — KKT monitoring, receipts, Z-reports
-    auth: AuthStore;             // Ferma auth (legacy, kept for receipt sending)
+    posAuth: PosAuthStore;   // POS user auth
+    posStore: PosStore;      // Cart, products (WFM), shift
+    receiptStore: ReceiptStore;
+    markingStore: MarkingStore;
+    auth: AuthStore;         // Ferma® API v2.84 credentials
 
     constructor() {
         this.posAuth = new PosAuthStore();
@@ -21,7 +18,6 @@ export class RootStore {
         this.receiptStore = new ReceiptStore(this.auth);
         this.markingStore = new MarkingStore(this.auth);
         this.posStore = new PosStore(this.auth, this.receiptStore, this.posAuth);
-        this.ofdStore = new OfdStore(this.posAuth);
     }
 }
 

@@ -1,5 +1,6 @@
 import {makeAutoObservable, runInAction} from "mobx";
 import posApi, {ApiError, loadApiConfig, saveApiConfig} from "../api/posApi";
+import wfmApi from "../api/wfmApi.ts";
 
 export interface PosUser {
     id: number;
@@ -56,7 +57,7 @@ export class PosAuthStore {
         });
 
         try {
-            const res = await posApi.login(username, password);
+            const res = await wfmApi.login(username, password);
             runInAction(() => {
                 this.username = username;
                 this.password = password;

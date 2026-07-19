@@ -2,24 +2,15 @@ import {makeAutoObservable, runInAction} from "mobx";
 import type {TaxationSystem} from "../api/fermaApi";
 import fermaApi, {FermaApiError} from "../api/fermaApi";
 
-export const INITIAL_AUTH = {
-    login: "fermatest2",
-    password: "Go2999483Mb",
-    inn: "000000000000",
-    cashierName: "",
-    taxationSystem: "SimpleIn" as TaxationSystem,
-    baseUrl: "https://ferma-test.ofd.ru"
-}
-
 export class AuthStore {
     token: string | null = null;
     tokenExpiresAt: Date | null = null;
-    login = INITIAL_AUTH.login;
-    password = INITIAL_AUTH.password;
-    inn = INITIAL_AUTH.inn;
-    cashierName = INITIAL_AUTH.cashierName;
-    taxationSystem: TaxationSystem = INITIAL_AUTH.taxationSystem;
-    baseUrl = INITIAL_AUTH.baseUrl;
+    login = "fermatest2";
+    password = "Go2999483Mb";
+    inn = "000000000000";
+    cashierName = "";
+    taxationSystem: TaxationSystem = "SimpleIn";
+    baseUrl = "https://ferma-test.ofd.ru";
     isLoading = false;
     error: string | null = null;
     isConnected = false;

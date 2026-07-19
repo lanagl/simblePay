@@ -544,6 +544,7 @@ export const fermaApi = {
 
     // 3.3.3 — Проверка КМ в ТС ПИоТ (до формирования чека)
     checkMarkingCode(authToken: string, req: MarkingCheckRequest): Promise<MarkingCheckResponse> {
+        console.log("ТС ПИоТ");
         return request<MarkingCheckResponse>("POST", "/api/kkt/cloud/mc/piot/check", req, authToken);
     },
 

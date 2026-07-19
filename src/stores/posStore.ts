@@ -2,22 +2,17 @@ import {makeAutoObservable, runInAction} from "mobx";
 import type {AuthStore} from "./authStore";
 import type {ReceiptStore} from "./receiptStore";
 import type {PaymentSumType, ReceiptRequest, VatType} from "../api/fermaApi";
-import posApi, {ApiProduct} from "../api/posApi";
-import type {PosAuthStore} from "./posAuthStore";
+import wfmApi, {WfmCategory, WfmProduct} from "../api/wfmApi";
+import {PosAuthStore} from "./posAuthStore.ts";
 
 export interface Product {
     id: number;
     name: string;
     price: number;
     emoji: string;
-    category: string;
+    category?: number;
     barcode: string;
     isMarked: boolean;
-}
-
-export interface Category {
-    id: number;
-    name: string;
 }
 
 export interface CartItem {
@@ -65,16 +60,29 @@ function nowStr(): string {
     });
 }
 
+function mapWfmProduct(p: WfmProduct): Product {
+    return {
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        emoji: p.emoji ?? "📦",
+        category: p.category,
+        barcode: p.barcode ?? "",
+        isMarked: p.is_marked ?? false,
+    };
+}
+
 export class PosStore {
     private auth: AuthStore;
     private receiptSvc: ReceiptStore;
     private posAuth: PosAuthStore;
 
     products: Product[] = [];
-    categories: Category[] = [];
+    categories: WfmCategory[] = [];
     isLoadingProducts = false;
     productsFromApi = false;
     productsError: string | null = null;
+
     cart: CartItem[] = [];
     shiftState: ShiftState = "closed";
     currentShift: Shift | null = null;
@@ -90,29 +98,15 @@ export class PosStore {
         makeAutoObservable(this);
     }
 
-    // — Catalog (API) —
+    // — Catalog —
 
-    private fromApi(p: ApiProduct): Product {
-        return {
-            id: p.id,
-            name: p.name,
-            price: p.price,
-            emoji: p.emoji,
-            category: p.category,
-            barcode: p.barcode,
-            isMarked: p.is_marked,
-        };
-    }
-
-    private toApi(p: Omit<Product, "id">): Omit<ApiProduct, "id"> {
-        return {
-            name: p.name,
-            price: p.price,
-            emoji: p.emoji,
-            category: p.category,
-            barcode: p.barcode,
-            is_marked: p.isMarked,
-        };
+    get productCategories(): WfmCategory[] {
+        if (this.categories.length > 0) {
+            // Merge API categories with product categories, maintaining API order
+            const apiNames = this.categories.map(c => c);
+            return [...apiNames];
+        }
+        return [];
     }
 
     async loadProducts(): Promise<void> {
@@ -122,88 +116,44 @@ export class PosStore {
             this.productsError = null;
         });
         try {
-            const apiProducts = await posApi.getProducts(token ?? "");
+            const [wfmProducts, wfmCategories] = await Promise.all([
+                wfmApi.getProducts(token ?? ""),
+                wfmApi.getCategories(token ?? ""),
+            ]);
             runInAction(() => {
-                this.products = apiProducts.map((p) => this.fromApi(p));
-                this.productsFromApi = true;
+                if (wfmProducts.length > 0) {
+                    this.products = wfmProducts.map(mapWfmProduct);
+                    this.productsFromApi = true;
+                }
+                if (wfmCategories.length > 0) {
+                    this.categories = wfmCategories.map(c => c);
+                }
                 this.isLoadingProducts = false;
             });
         } catch {
             runInAction(() => {
-                this.productsError = "Не удалось загрузить товары из БД, используются локальные данные";
+                this.productsError = "Не удалось загрузить товары с сервера, используются демо-данные";
                 this.productsFromApi = false;
                 this.isLoadingProducts = false;
             });
         }
     }
 
-    async loadCategories(): Promise<void> {
-        const {token} = this.posAuth;
-        try {
-            const apiCategories = await posApi.getCategories(token ?? "");
-            runInAction(() => {
-                this.categories = apiCategories.map((p) => this.fromApi(p));
-            });
-        } catch {
-            runInAction(() => {
-                this.productsError = "Не удалось загрузить категории из БД";
-            });
-        }
-    }
-
-    async addProduct(p: Omit<Product, "id">): Promise<void> {
-        const {token} = this.posAuth;
-        if (token) {
-            try {
-                const created = await posApi.createProduct(token, this.toApi(p));
-                runInAction(() => {
-                    this.products.push(this.fromApi(created));
-                });
-                return;
-            } catch { /* fall through to local */
-            }
-        }
-        // Offline fallback
+    addProduct(p: Omit<Product, "id">): void {
         runInAction(() => {
-            const id = Math.max(0, ...this.products.map((p) => p.id)) + 1;
+            const id = Math.max(0, ...this.products.map((pr) => pr.id)) + 1;
             this.products.push({...p, id});
         });
     }
 
-    async updateProduct(id: number, patch: Partial<Omit<Product, "id">>): Promise<void> {
-        const {token} = this.posAuth;
-        if (token) {
-            try {
-                const apiPatch: Partial<Omit<ApiProduct, "id">> = {};
-                if (patch.name !== undefined) apiPatch.name = patch.name;
-                if (patch.price !== undefined) apiPatch.price = patch.price;
-                if (patch.emoji !== undefined) apiPatch.emoji = patch.emoji;
-                if (patch.category !== undefined) apiPatch.category = patch.category;
-                if (patch.barcode !== undefined) apiPatch.barcode = patch.barcode;
-                if (patch.isMarked !== undefined) apiPatch.is_marked = patch.isMarked;
-                const updated = await posApi.updateProduct(token, id, apiPatch);
-                runInAction(() => {
-                    const idx = this.products.findIndex((p) => p.id === id);
-                    if (idx >= 0) this.products[idx] = this.fromApi(updated);
-                });
-                return;
-            } catch { /* fall through to local */
-            }
-        }
+    updateProduct(id: number, patch: Partial<Omit<Product, "id">>): void {
         runInAction(() => {
             const idx = this.products.findIndex((p) => p.id === id);
             if (idx >= 0) this.products[idx] = {...this.products[idx], ...patch};
         });
     }
 
-    async deleteProduct(id: number): Promise<void> {
-        const {token} = this.posAuth;
-        if (token) {
-            try {
-                await posApi.deleteProduct(token, id);
-            } catch { /* fall through to local */
-            }
-        }
+    deleteProduct(id: number): void {
         runInAction(() => {
             this.products = this.products.filter((p) => p.id !== id);
             this.cart = this.cart.filter((i) => i.product.id !== id);
@@ -250,9 +200,7 @@ export class PosStore {
             this.removeFromCart(productId);
         } else {
             item.qty = newQty;
-            if (item.markCodes.length > newQty) {
-                item.markCodes = item.markCodes.slice(0, newQty);
-            }
+            if (item.markCodes.length > newQty) item.markCodes = item.markCodes.slice(0, newQty);
         }
     }
 
@@ -320,7 +268,6 @@ export class PosStore {
             time: nowStr(),
         };
 
-        // Try to send to OFD Ferma
         runInAction(() => {
             this.isSendingToOfd = true;
             this.lastOfdError = null;
@@ -346,12 +293,8 @@ export class PosStore {
             this.isSendingToOfd = false;
             this.completedReceipts.push(receipt);
             this.currentShift!.receiptCount += 1;
-            if (method === "cash" || method === "mixed") {
-                this.currentShift!.totalCash += cashPaid;
-            }
-            if (method === "card" || method === "mixed") {
-                this.currentShift!.totalCard += cardPaid;
-            }
+            if (method === "cash" || method === "mixed") this.currentShift!.totalCash += cashPaid;
+            if (method === "card" || method === "mixed") this.currentShift!.totalCard += cardPaid;
             this.cart = [];
         });
 
@@ -367,7 +310,7 @@ export class PosStore {
                 Price: ci.product.price,
                 Quantity: ci.qty,
                 Amount: ci.product.price * ci.qty,
-                Vat: "VatNo" as VatType,
+                Vat: "Vat20" as VatType,
                 Measure: "PIECE" as const,
                 PaymentMethod: 4,
             };
