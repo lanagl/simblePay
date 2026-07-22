@@ -1693,7 +1693,7 @@ export default observer(function App() {
             {posStore.cart.length > 0 && (
                 <div className="px-4 pb-2">
                     <div className="flex gap-1.5">
-                        {[0, 5, 10, 15].map(d => (
+                        {[0, 5, 10, 25, 30, 50].map(d => (
                             <button key={d} onClick={() => setDiscount(d)}
                                     className={`flex-1 h-8 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${discount === d ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground border border-border hover:border-accent/50"}`}>
                                 {d === 0 ? "—" : <><Tag className="w-2.5 h-2.5"/>{d}%</>}
