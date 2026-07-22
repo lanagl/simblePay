@@ -139,11 +139,20 @@ export class PosStore {
         }
     }
 
-    addProduct(p: Omit<Product, "id">): void {
-        runInAction(() => {
-            const id = Math.max(0, ...this.products.map((pr) => pr.id)) + 1;
-            this.products.push({...p, id});
-        });
+    async addProduct(p: Omit<Product, "id">): void {
+        const {token} = this.posAuth;
+        try {
+            //await wfmApi.setProducts(token ?? "", p);
+            runInAction(() => {
+                const id = Math.max(0, ...this.products.map((pr) => pr.id)) + 1;
+                this.products.push({...p, id});
+            });
+        } catch {
+            runInAction(() => {
+                this.productsError = "Не удалось сохранить товар";
+            });
+        }
+
     }
 
     updateProduct(id: number, patch: Partial<Omit<Product, "id">>): void {

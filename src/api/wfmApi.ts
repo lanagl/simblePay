@@ -103,6 +103,11 @@ export const wfmApi = {
         return request<WfmProduct[]>("POST", "Entity/Kassa/data", q, token);
     },
 
+    setProducts(token: string, q?: Omit<WfmProduct, "id">): Promise<WfmProduct[]> {
+        return request<WfmProduct[]>("PUT", "Entity/Kassa", q, token);
+    },
+
+
     /** POST Entity/KassaCategory/data */
     getCategories(token: string, q?: WfmQuery): Promise<WfmCategory[]> {
         if (!q) {

@@ -54,7 +54,7 @@ import wfmApi, {WfmCategory} from "../api/wfmApi";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRESET_CATEGORIES = ["Напитки", "Выпечка", "Молочные", "Снеки", "Табак"];
-const PRESET_EMOJIS = ["🥤", "💧", "🍊", "⚡", "☕", "🥐", "🥖", "🫓", "🥛", "🍶", "🧀", "🫙", "🥔", "🍫", "🥜", "🚬", "🔥", "🍕", "🍔", "🌮", "🍱", "🥗", "🍰", "🍩", "🍬", "🧃", "🍺", "🫖", "🧴", "🪥", "📦", "🛒"];
+const PRESET_EMOJIS = ["👧", "💰", "🛍", "👜", "🎊", "🏷️", "🛁", "🕯️", "🎂", "📷", "📃", "🖨", "🥛", "🧼", "🛍️", "🥤", "💧", "🍊", "⚡", "☕", "🥐", "🥖", "🫓", "🥛", "🍶", "🧀", "🫙", "🥔", "🍫", "🥜", "🚬", "🔥", "🍕", "🍔", "🌮", "🍱", "🥗", "🍰", "🍩", "🍬", "🧃", "🍺", "🫖", "🧴", "🪥", "📦", "🛒"];
 const CASHIERS = ["Глазырина С."];
 const TAX_RATE = 0.0;
 
@@ -474,7 +474,7 @@ const OfdSettingsModal = observer(({onClose}: { onClose: () => void }) => {
                                 : <WifiOff className="w-4 h-4 text-muted-foreground shrink-0"/>}
                         <div className="min-w-0">
                             <p className={`text-sm font-semibold ${statusOk ? "text-primary" : auth.isLoading ? "text-yellow-500" : "text-muted-foreground"}`}>
-                                {auth.isLoading ? "Авторизация..." : statusOk ? "Подключено · токен действует" : auth.error ?? "Не авторизован"}
+                                {auth.isLoading ? "Авторизация..." : statusOk ? `Подключено ${server} · токен действует` : auth.error ?? "Не авторизован"}
                             </p>
                             {statusOk && auth.tokenExpiresStr && (
                                 <p className="text-xs text-muted-foreground font-mono truncate">до {auth.tokenExpiresStr}</p>
@@ -899,10 +899,12 @@ function ProductModal({existingCategories, initial, onSave, onClose}: ProductMod
 // ─── Shift Open Screen ────────────────────────────────────────────────────────
 
 const ShiftOpenScreen = observer(({onOpen}: { onOpen: (cashier: string, cash: number) => void }) => {
-    const {posStore, posAuth} = useStore();
+    const {posStore, posAuth, auth} = useStore();
     const [cashier, setCashier] = useState(posAuth.user?.name ?? CASHIERS[0]);
     const [cashStr, setCashStr] = useState("0");
     const [step, setStep] = useState<"form" | "confirm">("form");
+    const [showOfdSettings, setShowOfdSettings] = useState(false);
+
     const cashAmt = parseInt(cashStr) || 0;
 
     return (
@@ -931,6 +933,17 @@ const ShiftOpenScreen = observer(({onOpen}: { onOpen: (cashier: string, cash: nu
                                 <h2 className="font-bold text-foreground">Открытие смены
                                     №{posStore.shiftNumber + 1}</h2>
                             </div>
+                            <button onClick={() => setShowOfdSettings(true)}
+                                    className={`hidden sm:flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                                        auth.isConnected && auth.isTokenValid
+                                            ? "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+                                            : "bg-muted border-border text-muted-foreground hover:border-primary/30"
+                                    }`}>
+                                {auth.isLoading ? <Loader2 className="w-3 h-3 animate-spin"/>
+                                    : auth.isConnected && auth.isTokenValid ? <Zap className="w-3 h-3"/>
+                                        : <WifiOff className="w-3 h-3"/>}
+                                <span className="hidden md:inline">Ферма</span>
+                            </button>
                             <div className="mb-4">
                                 <label
                                     className="text-xs text-muted-foreground uppercase tracking-wide mb-2 block">Кассир</label>
@@ -1005,6 +1018,7 @@ const ShiftOpenScreen = observer(({onOpen}: { onOpen: (cashier: string, cash: nu
                     </div>
                 )}
             </div>
+            {showOfdSettings && <OfdSettingsModal onClose={() => setShowOfdSettings(false)}/>}
         </div>
     );
 });
@@ -1200,6 +1214,7 @@ export default observer(function App() {
 
     const [category, setCategory] = useState<number | string>("Все");
     const [search, setSearch] = useState("");
+    const [email, setEmail] = useState("info@podarokmaster.ru");
     const [view, setView] = useState<AppView>("pos");
     const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
     const [cashInput, setCashInput] = useState("0");
@@ -1212,6 +1227,7 @@ export default observer(function App() {
     const [showApiSettings, setShowApiSettings] = useState(false);
     const [scanningProductId, setScanningProductId] = useState<number | null>(null);
     const [isPaying, setIsPaying] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
     const [lastReceipt, setLastReceipt] = useState<{
         items: CartItem[]; total: number; cash: number; change: number;
         method: PaymentMethod; time: string; fermaReceiptId?: string;
@@ -1254,7 +1270,8 @@ export default observer(function App() {
         const result = await posStore.processPayment(
             payMethod,
             payMethod === "cash" ? cashNum : 0,
-            payMethod === "card" ? total : 0
+            payMethod === "card" ? total : 0,
+            email
         );
         setIsPaying(false);
         if (result) {
@@ -1444,6 +1461,17 @@ export default observer(function App() {
                                 <p className="text-muted-foreground text-sm mt-1">Ожидание терминала...</p>
                             </div>
                         )}
+                        <div>
+                            <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 block">Email
+                                *</label>
+                            <input value={email} onChange={e => {
+                                setEmail(e.target.value);
+                                setErrors(v => ({...v, email: ""}));
+                            }}
+                                   placeholder="Молоко Простоквашино 1л"
+                                   className={`w-full h-11 bg-secondary border rounded-xl px-3 text-sm focus:outline-none transition-colors ${errors.name ? "border-destructive" : "border-border focus:border-primary/60"}`}/>
+                            {errors.name && <p className="text-destructive text-xs mt-1">{errors.email}</p>}
+                        </div>
                         <button onClick={handlePay}
                                 disabled={(payMethod === "cash" && cashNum < total) || isPaying}
                                 className="w-full h-14 bg-primary text-primary-foreground rounded-xl font-bold text-lg hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2">
