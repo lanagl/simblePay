@@ -319,7 +319,7 @@ export class PosStore {
                 Price: ci.product.price,
                 Quantity: ci.qty,
                 Amount: ci.product.price * ci.qty,
-                Vat: "Vat20" as VatType,
+                Vat: "VatNo" as VatType,
                 Measure: "PIECE" as const,
                 PaymentMethod: 4,
             };
