@@ -625,13 +625,14 @@ function MarkScanModal({item, onSave, onClose}: MarkScanModalProps) {
             setError("Все коды уже отсканированы");
             return;
         }
-        markingStore.checkCode(code)
-            .then(r => {
-                if (r)
-                    setCodes(c => [...c, code])
-                else
-                    setError("Ошибочный код")
-            });
+        setCodes(c => [...c, code]);
+        // markingStore.checkCode(code)
+        //     .then(r => {
+        //         if (r)
+        //             setCodes(c => [...c, code])
+        //         else
+        //             setError("Ошибочный код")
+        //     });
 
         setInput("");
         setError("");

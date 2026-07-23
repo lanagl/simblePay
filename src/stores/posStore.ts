@@ -354,12 +354,13 @@ export class PosStore {
             Type: "Income",
             InvoiceId: receipt.id,
             CustomerReceipt: {
-                TaxationSystem: this.auth.taxationSystem ?? "Common",
+                TaxationSystem: this.auth.taxationSystem ?? "SimpleIn",
                 Email: customerEmail,
                 Items: items,
                 PaymentItems: paymentItems,
             },
             Cashier: {Name: this.auth.cashierName || shift.cashier},
+
         };
     }
 }
